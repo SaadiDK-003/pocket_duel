@@ -1,0 +1,14 @@
+# Godot 4 — generated engine cache and imports.
+.godot/
+
+# Exported builds.
+/build/
+*.apk
+*.aab
+# export_presets.cfg is committed (no secrets in it; the keystore lives in
+# Godot's editor settings, not here).
+
+# OS / editor noise.
+.DS_Store
+Thumbs.db
+*~
