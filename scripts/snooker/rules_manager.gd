@@ -138,6 +138,12 @@ func evaluate(first, potted: Array, cue_potted: bool) -> Dictionary:
 		res["respot"] = colours.duplicate()          # All potted colours respot.
 		reds_remaining -= reds.size()                # Fouled reds stay down, no score.
 
+	# If the reds are gone but we're still "on a red" (e.g. the last red went in
+	# on a foul), the game moves to the colours sequence — yellow is next on.
+	if phase == Phase.REDS and reds_remaining <= 0 and on_red:
+		phase = Phase.COLOURS
+		next_colour = 2
+
 	return res
 
 
