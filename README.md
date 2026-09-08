@@ -35,9 +35,10 @@ The main scene is `scenes/snooker/snooker_game.tscn` and runs on launch.
 
 ## 3. How to play (prototype controls)
 
-- **Drag toward where you want to shoot** — the aim line points that way and the
-  further you drag, the more power (watch the power bar). Dragging into the open
-  table means it works even when the cue ball is on a rail.
+- **Pull back to shoot** (8-ball-pool style): drag away from the target to load
+  the cue; the ball fires the opposite way and the further you pull, the more
+  power. The aim follows your drag motion, so you can pull back anywhere in the
+  open table — it works even when the cue ball is on a rail.
 - With **Tap to Shoot** on (Settings), release locks the aim and you tap the
   **SHOOT** button; with it off, releasing fires immediately.
 - **Restart / rematch** from the pause menu (the **II** button or **Esc**).

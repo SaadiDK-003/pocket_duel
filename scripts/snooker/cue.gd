@@ -24,7 +24,8 @@ var _placing: bool = false             # Dragging the cue ball within the D.
 var _ready: bool = false               # Aim locked, awaiting the SHOOT tap.
 var _shot_dir: Vector2 = Vector2.ZERO
 var _shot_power: float = 0.0
-var _pointer: Vector2 = Vector2.ZERO   # Current pointer position (world space).
+var _drag_start: Vector2 = Vector2.ZERO   # Where the aim drag began.
+var _pointer: Vector2 = Vector2.ZERO      # Current pointer position (world space).
 
 const AIM_RANGE: float = 300.0       # Distance from the ball for 100% power.
 const DEAD_ZONE: float = 14.0        # Below this the aim/shot is ignored.
@@ -68,6 +69,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_aiming = true
 				_ready = false
 				game.hud.set_shoot_visible(false)
+				_drag_start = m
 				_pointer = m
 				_update_power()
 		else:
@@ -129,14 +131,14 @@ func _update_power() -> void:
 
 
 func _aim() -> Dictionary:
-	# Direct aiming: the shot fires TOWARD the pointer — drag in the direction you
-	# want to hit, and the further you drag, the more power. Because you always
-	# drag into the open table, this works even when the cue ball is on a rail
-	# (no need for room on the far side, as the old pull-back required).
-	var to_pointer: Vector2 = _pointer - cue_ball.position
-	var dist: float = to_pointer.length()
+	# Pull-back (8-ball-pool style): the shot fires OPPOSITE to your drag — pull
+	# back to load power, release to fire forward. The aim is the drag VECTOR (not
+	# the finger's position by the ball), so you can perform the pull-back anywhere
+	# in the open table — it works even when the cue ball sits on a rail.
+	var drag: Vector2 = _pointer - _drag_start
+	var dist: float = drag.length()
 	var power: float = clampf(dist / AIM_RANGE, 0.0, 1.0)
-	var dir: Vector2 = to_pointer.normalized() if dist > 0.0 else Vector2.ZERO
+	var dir: Vector2 = (-drag).normalized() if dist > 0.0 else Vector2.ZERO
 	return {"dir": dir, "power": power, "dist": dist}
 
 
