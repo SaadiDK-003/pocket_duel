@@ -50,8 +50,8 @@ func _build() -> void:
 	_title(vb, "POCKET DUEL", 112, TEXT)
 	_title(vb, "SNOOKER", 40, ACCENT)
 	_spacer(vb, 30)
-	_button(vb, "2 PLAYERS", func(): _show_name_entry("Classic"), true)
-	_button(vb, "QUICK SNOOKER", func(): _show_name_entry("Quick"), false)
+	_button(vb, "PLAY WITH HUMAN", func(): _show_prematch(false), true)
+	_button(vb, "PLAY WITH BOT", func(): _show_prematch(true), false)
 	_spacer(vb, 8)
 	_button(vb, "SETTINGS", _show_settings, false)
 	_button(vb, "REMOVE ADS", func(): _toast_show("Remove Ads — coming in a later phase"), false)
@@ -186,32 +186,43 @@ func _field(parent: Node, placeholder: String) -> LineEdit:
 	return le
 
 
-# ------------------------------------------------------------------ Name entry
-func _show_name_entry(mode: String) -> void:
+# ------------------------------------------------------------------ Pre-match
+## Opponent is already chosen on the main menu (is_bot). Here we pick the mode,
+## names, difficulty (bot only), and best-of.
+func _show_prematch(is_bot: bool) -> void:
+	GameState.vs_ai = is_bot
+	if GameState.mode != "Classic" and GameState.mode != "Quick":
+		GameState.mode = "Classic"
+
 	var vb := _open_modal()
-	_title(vb, "%s Snooker" % mode, 46, TEXT)
+	_title(vb, "Vs Bot" if is_bot else "Two Players", 46, TEXT)
 	_spacer(vb, 6)
+
+	# Mode selector (Classic / Quick).
+	var mode_btn := _button(vb, "", func(): pass, false)
+	var mode_label := func() -> String:
+		return "Classic Snooker (15 reds)" if GameState.mode == "Classic" else "Quick Snooker (6 reds)"
+	mode_btn.text = mode_label.call()
+	mode_btn.pressed.connect(func():
+		GameState.mode = "Quick" if GameState.mode == "Classic" else "Classic"
+		mode_btn.text = mode_label.call())
+
 	var le1 := _field(vb, "Player 1")
-	var le2 := _field(vb, "Player 2")
-	_spacer(vb, 6)
+	var le2: LineEdit = null
+	if is_bot:
+		# Difficulty selector.
+		var diff_names := ["Easy", "Medium", "Hard"]
+		var diff_btn := _button(vb, "", func(): pass, false)
+		var diff_label := func() -> String:
+			return "Difficulty: %s" % diff_names[clampi(GameState.ai_difficulty, 0, 2)]
+		diff_btn.text = diff_label.call()
+		diff_btn.pressed.connect(func():
+			GameState.ai_difficulty = (GameState.ai_difficulty + 1) % 3
+			diff_btn.text = diff_label.call())
+	else:
+		le2 = _field(vb, "Player 2")
 
-	var opp_labels := ["Opponent: Human", "Opponent: Bot (Easy)",
-		"Opponent: Bot (Medium)", "Opponent: Bot (Hard)"]
-	var opp_btn := _button(vb, "", func(): pass, false)
-	var apply_opp := func(idx: int):
-		GameState.vs_ai = idx > 0
-		GameState.ai_difficulty = maxi(0, idx - 1)
-		opp_btn.text = opp_labels[idx]
-		le2.editable = not GameState.vs_ai
-		if GameState.vs_ai:
-			le2.text = "Bot"
-		elif le2.text == "Bot":
-			le2.text = ""
-	apply_opp.call((GameState.ai_difficulty + 1) if GameState.vs_ai else 0)
-	opp_btn.pressed.connect(func():
-		var cur := (GameState.ai_difficulty + 1) if GameState.vs_ai else 0
-		apply_opp.call((cur + 1) % opp_labels.size()))
-
+	# Best-of selector.
 	var bo_values := [1, 3, 5]
 	var bo_btn := _button(vb, "Best of %d" % GameState.best_of, func(): pass, false)
 	bo_btn.pressed.connect(func():
@@ -220,22 +231,17 @@ func _show_name_entry(mode: String) -> void:
 		bo_btn.text = "Best of %d" % GameState.best_of)
 
 	_spacer(vb, 10)
-	_button(vb, "START", func(): _begin_match(mode, le1.text, le2.text), true)
+	_button(vb, "START", func(): _begin_match(le1.text, "" if le2 == null else le2.text), true)
 	_button(vb, "Back", _close_modal, false)
 
 
-func _begin_match(mode: String, n1: String, n2: String) -> void:
+func _begin_match(n1: String, n2: String) -> void:
 	var name1 := n1.strip_edges()
 	var name2 := n2.strip_edges()
 	GameState.names = [
 		name1 if name1 != "" else "Player 1",
 		"Bot" if GameState.vs_ai else (name2 if name2 != "" else "Player 2"),
 	]
-	_start(mode)
-
-
-func _start(mode: String) -> void:
-	GameState.mode = mode
 	get_tree().change_scene_to_file(GAME_SCENE)
 
 
