@@ -129,13 +129,14 @@ func _update_power() -> void:
 
 
 func _aim() -> Dictionary:
-	# Slingshot anchored at the cue ball: the shot fires directly AWAY from the
-	# pointer, and the further the pointer is pulled from the ball, the more
-	# power. Aiming the pointer around the ball rotates the shot smoothly.
-	var pull: Vector2 = cue_ball.position - _pointer
-	var dist: float = pull.length()
+	# Direct aiming: the shot fires TOWARD the pointer — drag in the direction you
+	# want to hit, and the further you drag, the more power. Because you always
+	# drag into the open table, this works even when the cue ball is on a rail
+	# (no need for room on the far side, as the old pull-back required).
+	var to_pointer: Vector2 = _pointer - cue_ball.position
+	var dist: float = to_pointer.length()
 	var power: float = clampf(dist / AIM_RANGE, 0.0, 1.0)
-	var dir: Vector2 = pull.normalized() if dist > 0.0 else Vector2.ZERO
+	var dir: Vector2 = to_pointer.normalized() if dist > 0.0 else Vector2.ZERO
 	return {"dir": dir, "power": power, "dist": dist}
 
 

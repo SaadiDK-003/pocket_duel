@@ -35,10 +35,11 @@ The main scene is `scenes/snooker/snooker_game.tscn` and runs on launch.
 
 ## 3. How to play (prototype controls)
 
-- **Press and drag away** from the cue ball, then **release** — slingshot aim.
-  Pull further = more power (watch the power bar, bottom-left).
-- The white aim line shows the shot direction; controls lock while balls roll
-  and unlock when everything stops.
+- **Drag toward where you want to shoot** — the aim line points that way and the
+  further you drag, the more power (watch the power bar). Dragging into the open
+  table means it works even when the cue ball is on a rail.
+- With **Tap to Shoot** on (Settings), release locks the aim and you tap the
+  **SHOOT** button; with it off, releasing fires immediately.
 - **Restart / rematch** from the pause menu (the **II** button or **Esc**).
   (Desktop dev shortcut: **R**. Right-click does nothing — it must never reset a live frame.)
 
