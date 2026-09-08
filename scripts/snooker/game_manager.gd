@@ -312,22 +312,6 @@ func _concede() -> void:
 	_end_frame(1 - turn.current)
 
 
-## Upper bound on points still available on the table (for bot concede logic).
-func _points_remaining() -> int:
-	if rules.phase == RulesManager.Phase.COLOURS:
-		var s := 0
-		for v in [2, 3, 4, 5, 6, 7]:
-			if v >= rules.next_colour:
-				s += v
-		return s
-	return rules.reds_remaining * 8 + 27   # each red + a colour, plus the colours.
-
-
-func _bot_hopeless() -> bool:
-	var deficit := turn.scores[0] - turn.scores[1]   # human - bot
-	return deficit > 0 and _points_remaining() < deficit
-
-
 # ------------------------------------------------------------------ Undo
 func _push_undo() -> void:
 	var snap := {
@@ -484,10 +468,7 @@ func _schedule_ai() -> void:
 	await get_tree().create_timer(0.8).timeout
 	if token != _ai_seq or not (_is_ai_turn() and can_shoot()):
 		return
-	if _bot_hopeless():                 # No way back — the bot concedes.
-		_frame_over = true
-		_end_frame(0)
-		return
+	# The bot always plays it out — no auto-concede (it was abrupt/confusing).
 	var shot: Dictionary = ai.choose_shot(self)
 	shoot(shot["dir"], shot["power"], shot.get("side", 0.0), shot.get("follow", 0.0), false)
 
