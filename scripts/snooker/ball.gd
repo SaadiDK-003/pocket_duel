@@ -27,7 +27,7 @@ var color: Color = Color(0.8, 0.08, 0.08)
 var starting_position: Vector2 = Vector2.ZERO
 
 # --- Pot animation (sink into the pocket) ---
-const SINK_TIME: float = 0.24
+const SINK_TIME: float = 0.30
 var _sinking: bool = false
 var _sink_t: float = 0.0
 var _sink_offset: Vector2 = Vector2.ZERO   # Local vector toward the pocket centre.
@@ -102,22 +102,31 @@ func _draw() -> void:
 		return
 	if _sinking:
 		var t := clampf(_sink_t, 0.0, 1.0)
-		# Slide toward the pocket (accelerating), shrink, and fade.
-		_paint(_sink_offset * (t * t), radius * (1.0 - 0.82 * t), 1.0 - t)
+		# 1) Roll to the pocket mouth (reached by ~55%), accelerating in.
+		var move := minf(t / 0.55, 1.0)
+		var c := _sink_offset * (move * move)
+		# 2) Fall into the hole: shrink faster as it drops (t^2).
+		var s := maxf(1.0 - t * t, 0.02)
+		# 3) Darken into the pocket's shadow, and only fade right at the end.
+		var dark := t * 0.75
+		var a := 1.0 if t < 0.82 else (1.0 - (t - 0.82) / 0.18)
+		# Highlight dims as it turns away from the light while dropping.
+		_paint(c, radius * s, a, color.lerp(Color(0.02, 0.02, 0.02), dark), 1.0 - dark)
 	else:
-		_paint(Vector2.ZERO, radius, 1.0)
+		_paint(Vector2.ZERO, radius, 1.0, color, 1.0)
 
 
-## Paint the ball centred at `c`, radius `r`, with overall opacity `a`.
-func _paint(c: Vector2, r: float, a: float) -> void:
+## Paint the ball centred at `c`, radius `r`, opacity `a`, base colour `base`,
+## and highlight strength `hl` (dimmed while sinking).
+func _paint(c: Vector2, r: float, a: float, base: Color, hl: float) -> void:
 	# Contact shadow on the cloth (down-right of the ball).
 	draw_circle(c + Vector2(r * 0.18, r * 0.28), r * 1.02, Color(0, 0, 0, 0.28 * a))
 	# Shaded base (rim darker) then the lit face offset toward the light (top-left).
-	draw_circle(c, r, _fade(color.darkened(0.30), a))
-	draw_circle(c + Vector2(-r * 0.16, -r * 0.16), r * 0.82, _fade(color, a))
-	# Highlight glow + tight specular dot.
-	draw_circle(c + Vector2(-r * 0.30, -r * 0.30), r * 0.34, _fade(color.lightened(0.35), a))
-	draw_circle(c + Vector2(-r * 0.34, -r * 0.34), r * 0.15, Color(1, 1, 1, 0.75 * a))
+	draw_circle(c, r, _fade(base.darkened(0.30), a))
+	draw_circle(c + Vector2(-r * 0.16, -r * 0.16), r * 0.82, _fade(base, a))
+	# Highlight glow + tight specular dot (fade out as the ball drops away).
+	draw_circle(c + Vector2(-r * 0.30, -r * 0.30), r * 0.34, _fade(base.lightened(0.35), a * hl))
+	draw_circle(c + Vector2(-r * 0.34, -r * 0.34), r * 0.15, Color(1, 1, 1, 0.75 * a * hl))
 	# Thin dark outline so balls read against the felt.
 	draw_arc(c, r, 0.0, TAU, 32, Color(0, 0, 0, 0.35 * a), 1.5, true)
 
