@@ -195,20 +195,17 @@ func _draw_prediction(origin: Vector2, dir: Vector2) -> void:
 
 	if hit["type"] == "ball":
 		var target: Ball = hit["target"]
-		draw_arc(contact, r, 0.0, TAU, 28, Color(1, 1, 1, 0.4), 1.5)   # ghost cue ball
-		# Object ball's path along the line of centres, cast to where it ends up.
+		draw_arc(contact, r, 0.0, TAU, 28, Color(1, 1, 1, 0.45), 2.0)   # ghost cue ball
+		# Short guide along the line of centres — green if this shot will pot.
 		var n: Vector2 = (target.position - contact).normalized()
-		var obj: Dictionary = _cast(target.position, n, [target, cue_ball])
-		var pots: bool = obj["type"] == "pocket"
-		var obj_col := green if pots else Color(1.0, 0.82, 0.25, 0.85)
-		draw_line(target.position, obj["point"], obj_col, 2.5)
-		if pots:
-			draw_arc(obj["point"], 12.0, 0.0, TAU, 20, green, 2.5)
-		# Cyan: the cue ball's deflection (tangent). Tiny on a full-ball stun.
+		var pots: bool = _cast(target.position, n, [target, cue_ball])["type"] == "pocket"
+		var obj_col := green if pots else Color(1.0, 0.82, 0.25, 0.9)
+		draw_line(target.position, target.position + n * 92.0, obj_col, 3.0)
+		# Cyan: the cue ball's short deflection (tangent). Tiny on a full-ball stun.
 		var deflect: Vector2 = dir - dir.dot(n) * n
 		if deflect.length() > 0.06:
 			deflect = deflect.normalized()
-			draw_line(contact, contact + deflect * 90.0, Color(0.45, 0.85, 1.0, 0.8), 2.0)
+			draw_line(contact, contact + deflect * 72.0, Color(0.45, 0.85, 1.0, 0.75), 2.5)
 	elif hit["type"] == "cushion":
 		var nrm: Vector2 = hit["normal"]
 		var refl: Vector2 = dir - 2.0 * dir.dot(nrm) * nrm
