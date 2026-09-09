@@ -31,7 +31,6 @@ window/size/viewport_width=1920
 window/size/viewport_height=1080
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-; 4 = Sensor Landscape (works held either landscape way on a phone).
 window/handheld/orientation=4
 
 [rendering]

@@ -183,31 +183,36 @@ func _draw() -> void:
 
 
 func _draw_prediction(origin: Vector2, dir: Vector2) -> void:
-	var hit: Dictionary = _cast(origin, dir)
+	var hit: Dictionary = _cast(origin, dir, [cue_ball])
 	var contact: Vector2 = hit["point"]
 	var r: float = cue_ball.radius
+	var green := Color(0.35, 0.92, 0.45, 0.95)   # "will pot"
+	var red := Color(1.0, 0.35, 0.32, 0.95)      # "scratch!"
 
-	# Main aim line — dashed guide from the cue ball to the first contact.
-	_dashed(origin, contact, Color(1, 1, 1, 0.7), 2.0, 13.0)
+	# Main aim line to first contact. Red = the cue ball would go in-off.
+	var main_col := red if hit["type"] == "pocket" else Color(1, 1, 1, 0.7)
+	_dashed(origin, contact, main_col, 2.0, 13.0)
 
 	if hit["type"] == "ball":
 		var target: Ball = hit["target"]
-		# Ghost cue-ball outline where the cue ball would make contact.
-		draw_arc(contact, r, 0.0, TAU, 28, Color(1, 1, 1, 0.4), 1.5)
-		# Yellow: the struck ball's travel direction (line of centres).
+		draw_arc(contact, r, 0.0, TAU, 28, Color(1, 1, 1, 0.4), 1.5)   # ghost cue ball
+		# Object ball's path along the line of centres, cast to where it ends up.
 		var n: Vector2 = (target.position - contact).normalized()
-		draw_line(target.position, target.position + n * 80.0, Color(1.0, 0.82, 0.25, 0.8), 2.0)
-		# Cyan: where the CUE ball deflects (tangent line, perpendicular to n).
-		# Near-zero on a full-ball hit (cue stuns) — only drawn when meaningful.
+		var obj: Dictionary = _cast(target.position, n, [target, cue_ball])
+		var pots: bool = obj["type"] == "pocket"
+		var obj_col := green if pots else Color(1.0, 0.82, 0.25, 0.85)
+		draw_line(target.position, obj["point"], obj_col, 2.5)
+		if pots:
+			draw_arc(obj["point"], 12.0, 0.0, TAU, 20, green, 2.5)
+		# Cyan: the cue ball's deflection (tangent). Tiny on a full-ball stun.
 		var deflect: Vector2 = dir - dir.dot(n) * n
 		if deflect.length() > 0.06:
 			deflect = deflect.normalized()
-			draw_line(contact, contact + deflect * 80.0, Color(0.45, 0.85, 1.0, 0.8), 2.0)
+			draw_line(contact, contact + deflect * 90.0, Color(0.45, 0.85, 1.0, 0.8), 2.0)
 	elif hit["type"] == "cushion":
-		# Short preview of one bounce off the rail.
 		var nrm: Vector2 = hit["normal"]
 		var refl: Vector2 = dir - 2.0 * dir.dot(nrm) * nrm
-		_dashed(contact, contact + refl * 110.0, Color(1, 1, 1, 0.4), 2.0, 12.0)
+		_dashed(contact, contact + refl * 120.0, Color(1, 1, 1, 0.4), 2.0, 12.0)
 
 
 ## Manual dashed line (draw_dashed_line can intermittently drop the whole line).
@@ -249,10 +254,11 @@ func _draw_cue_stick(origin: Vector2, dir: Vector2, power: float) -> void:
 
 
 # ------------------------------------------------------------------ Ray casting
-## Cast a ray from the cue ball along `dir`; return the first ball or cushion.
-## Result: { "type": "ball"|"cushion"|"none", "point": Vector2,
+## Cast a ray along `dir`; return the first ball, pocket, or cushion it meets.
+## `ignore` lists balls to skip (e.g. the ball being cast from).
+## Result: { "type": "ball"|"pocket"|"cushion"|"none", "point": Vector2,
 ##           "target": Ball|null, "normal": Vector2 }
-func _cast(origin: Vector2, dir: Vector2) -> Dictionary:
+func _cast(origin: Vector2, dir: Vector2, ignore: Array = []) -> Dictionary:
 	var r: float = cue_ball.radius
 	var best_t: float = MAX_RAY
 	var res: Dictionary = {
@@ -260,9 +266,9 @@ func _cast(origin: Vector2, dir: Vector2) -> Dictionary:
 		"target": null, "normal": Vector2.ZERO,
 	}
 
-	# Balls (skip the cue ball itself and potted balls).
+	# Balls.
 	for b in game.balls:
-		if b == cue_ball or b.is_potted:
+		if b in ignore or b.is_potted:
 			continue
 		var t: float = _ray_circle(origin, dir, b.position, r + b.radius)
 		if t > 0.0 and t < best_t:
@@ -296,7 +302,17 @@ func _cast(origin: Vector2, dir: Vector2) -> Dictionary:
 			wt = t2; wn = Vector2(0, 1)
 	if wn != Vector2.ZERO and wt < best_t:
 		best_t = wt
-		res = {"type": "cushion", "point": origin + dir * wt, "target": null, "normal": wn}
+		var cush_pt: Vector2 = origin + dir * wt
+		# The cushion is broken at the pockets: if the ball reaches the rail inside
+		# a pocket mouth, it drops instead of bouncing.
+		var dropped := false
+		for p in game.table.pockets:
+			if cush_pt.distance_to(p["pos"]) <= p["radius"]:
+				res = {"type": "pocket", "point": p["pos"], "target": null, "normal": Vector2.ZERO}
+				dropped = true
+				break
+		if not dropped:
+			res = {"type": "cushion", "point": cush_pt, "target": null, "normal": wn}
 
 	return res
 
