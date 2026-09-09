@@ -78,6 +78,7 @@ var _last_vp: Vector2 = Vector2.ZERO
 var _confetti: CanvasLayer = null
 var _timer_active: bool = false
 var _shot_time_left: float = 0.0
+var _last_tick_sec: int = -1
 
 
 func _process(delta: float) -> void:
@@ -86,13 +87,19 @@ func _process(delta: float) -> void:
 		if _shot_time_left <= 0.0:
 			_on_shot_timeout()
 		else:
-			hud.set_timer(int(ceil(_shot_time_left)))
+			var secs := int(ceil(_shot_time_left))
+			hud.set_timer(secs)
+			if secs != _last_tick_sec and secs <= 5:   # Tick the last 5 seconds.
+				_last_tick_sec = secs
+				Audio.play("ui_click", -10.0, 0.0)
+				_vibrate(15)
 
 
 ## Start the per-shot countdown for a human turn (no-op if disabled or bot turn).
 func _start_shot_timer() -> void:
 	if GameState.shot_timer > 0 and is_human_turn() and not _frame_over and not _match_over:
 		_shot_time_left = float(GameState.shot_timer)
+		_last_tick_sec = -1
 		_timer_active = true
 		hud.set_timer(GameState.shot_timer)
 	else:
@@ -681,26 +688,29 @@ func _end_frame(forced_winner: int = -1) -> void:
 	Audio.play("win")
 	hud.refresh(turn, "")
 
+	var top_break := maxi(turn.highest_break[0], turn.highest_break[1])
 	var needed := GameState.best_of / 2 + 1
 	if turn.frames_won[winner] >= needed:
 		_match_over = true
 		_celebrate()
 		overlay.show_menu(
-			"🏆  %s WINS!\n%d – %d" % [turn.names[winner],
-				turn.frames_won[winner], turn.frames_won[1 - winner]],
+			"🏆  %s WINS!" % turn.names[winner],
 			[
 				{"text": "New Match", "callable": _restart_frame},
 				{"text": "Main Menu", "callable": _quit_to_menu},
-			])
+			],
+			"%d – %d frames   ·   Top break %d" % [
+				turn.frames_won[winner], turn.frames_won[1 - winner], top_break])
 	else:
 		overlay.show_menu(
-			"%s wins the frame\n%d – %d   (match %d–%d)" % [turn.names[winner],
-				turn.scores[winner], turn.scores[1 - winner],
-				turn.frames_won[0], turn.frames_won[1]],
+			"%s wins the frame" % turn.names[winner],
 			[
 				{"text": "Next Frame", "callable": _next_frame},
 				{"text": "Main Menu", "callable": _quit_to_menu},
-			])
+			],
+			"%d – %d   ·   match %d–%d   ·   top break %d" % [
+				turn.scores[winner], turn.scores[1 - winner],
+				turn.frames_won[0], turn.frames_won[1], top_break])
 
 
 ## Confetti burst over the whole screen for a match win.

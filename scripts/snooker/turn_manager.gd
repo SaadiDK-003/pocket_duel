@@ -11,6 +11,7 @@ var scores: Array[int] = [0, 0]
 var current: int = 0
 var break_score: int = 0        # Points scored in the current unbroken visit.
 var frames_won: Array[int] = [0, 0]   # Frames won this match.
+var highest_break: Array[int] = [0, 0]   # Best break each player made this match.
 
 
 func other() -> int:
@@ -25,6 +26,8 @@ func switch_turn() -> void:
 func add_score(points: int) -> void:
 	scores[current] += points
 	break_score += points
+	if break_score > highest_break[current]:
+		highest_break[current] = break_score
 
 
 func add_score_to(index: int, points: int) -> void:
@@ -37,6 +40,7 @@ func reset() -> void:
 	current = 0
 	break_score = 0
 	frames_won = [0, 0]
+	highest_break = [0, 0]
 
 
 ## Per-frame reset: fresh scores, chosen breaker, keep frames won.

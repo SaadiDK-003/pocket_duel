@@ -23,8 +23,8 @@ func _ready() -> void:
 
 
 ## buttons: Array of { "text": String, "callable": Callable }. The first is the
-## primary (gold) action.
-func show_menu(title: String, buttons: Array) -> void:
+## primary (gold) action. `subtitle` shows smaller text under the title.
+func show_menu(title: String, buttons: Array, subtitle: String = "") -> void:
 	for c in _root.get_children():
 		_root.remove_child(c)
 		c.free()
@@ -65,6 +65,14 @@ func show_menu(title: String, buttons: Array) -> void:
 	t.add_theme_font_size_override("font_size", 52)
 	t.add_theme_color_override("font_color", TEXT)
 	vb.add_child(t)
+
+	if subtitle != "":
+		var sub := Label.new()
+		sub.text = subtitle
+		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		sub.add_theme_font_size_override("font_size", 26)
+		sub.add_theme_color_override("font_color", Color(0.75, 0.8, 0.86))
+		vb.add_child(sub)
 
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0, 12)

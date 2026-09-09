@@ -80,7 +80,9 @@ func _eval_pot(game, cue: Ball, target: Ball, pocket: Vector2, radius: float) ->
 
 	var need := aim_dist + tp_dist
 	var power := clampf(need / 1700.0 / maxf(cut, 0.3), 0.22, 1.0)
-	var score := cut * 2.0 - need / 2200.0     # prefer straight and short.
+	# Prefer makeable (straight, short) shots, and — when there's a choice of
+	# legal balls — the higher-value one.
+	var score := cut * 2.0 - need / 2200.0 + target.value * 0.10
 	return {"dir": aim, "power": power, "score": score}
 
 
