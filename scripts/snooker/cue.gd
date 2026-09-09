@@ -186,30 +186,25 @@ func _draw_prediction(origin: Vector2, dir: Vector2) -> void:
 	var hit: Dictionary = _cast(origin, dir, [cue_ball])
 	var contact: Vector2 = hit["point"]
 	var r: float = cue_ball.radius
-	var green := Color(0.35, 0.92, 0.45, 0.95)   # "will pot"
-	var red := Color(1.0, 0.35, 0.32, 0.95)      # "scratch!"
 
-	# Main aim line to first contact. Red = the cue ball would go in-off.
-	var main_col := red if hit["type"] == "pocket" else Color(1, 1, 1, 0.7)
-	_dashed(origin, contact, main_col, 2.0, 13.0)
+	# Main aim line — solid white, to the first thing the cue ball meets.
+	draw_line(origin, contact, Color(1, 1, 1, 0.8), 2.5)
 
 	if hit["type"] == "ball":
 		var target: Ball = hit["target"]
 		draw_arc(contact, r, 0.0, TAU, 28, Color(1, 1, 1, 0.45), 2.0)   # ghost cue ball
-		# Short guide along the line of centres — green if this shot will pot.
+		# Object ball's direction (line of centres) — solid, constant colour.
 		var n: Vector2 = (target.position - contact).normalized()
-		var pots: bool = _cast(target.position, n, [target, cue_ball])["type"] == "pocket"
-		var obj_col := green if pots else Color(1.0, 0.82, 0.25, 0.9)
-		draw_line(target.position, target.position + n * 92.0, obj_col, 3.0)
-		# Cyan: the cue ball's short deflection (tangent). Tiny on a full-ball stun.
+		draw_line(target.position, target.position + n * 100.0, Color(1.0, 0.82, 0.25, 0.9), 3.0)
+		# Cue ball's deflection (tangent); tiny on a full-ball stun.
 		var deflect: Vector2 = dir - dir.dot(n) * n
 		if deflect.length() > 0.06:
 			deflect = deflect.normalized()
-			draw_line(contact, contact + deflect * 72.0, Color(0.45, 0.85, 1.0, 0.75), 2.5)
+			draw_line(contact, contact + deflect * 72.0, Color(0.45, 0.85, 1.0, 0.7), 2.5)
 	elif hit["type"] == "cushion":
 		var nrm: Vector2 = hit["normal"]
 		var refl: Vector2 = dir - 2.0 * dir.dot(nrm) * nrm
-		_dashed(contact, contact + refl * 120.0, Color(1, 1, 1, 0.4), 2.0, 12.0)
+		draw_line(contact, contact + refl * 120.0, Color(1, 1, 1, 0.4), 2.0)
 
 
 ## Manual dashed line (draw_dashed_line can intermittently drop the whole line).
