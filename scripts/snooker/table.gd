@@ -18,17 +18,17 @@ var baulk_x: float = 0.0
 var d_radius: float = 0.0
 var spots: Dictionary = {}                 # colour name -> Vector2
 
-# --- Physics ---
-var pocket_radius: float = 42.0            # Capture radius (unchanged; gameplay).
+# --- Physics --- (all scaled to the table in _compute_geometry)
+var pocket_radius: float = 42.0            # Capture radius.
 
-# --- Look & feel ---
+# --- Look & feel (scaled to the table) ---
 const CUSHION_W: float = 30.0              # Cushion band thickness.
 const RAIL_W: float = 46.0                 # Wooden frame beyond the cushions.
 const JAW: float = 16.0                    # How far cushion noses angle into pockets.
-const CORNER_OPEN: float = 44.0            # Cushion pullback near corner pockets.
-const MID_OPEN: float = 36.0               # Cushion pullback near middle pockets.
-const CORNER_HOLE: float = 34.0
-const MID_HOLE: float = 30.0
+var corner_open: float = 44.0              # Cushion pullback near corner pockets.
+var mid_open: float = 36.0                 # Cushion pullback near middle pockets.
+var corner_hole: float = 34.0
+var mid_hole: float = 30.0
 
 var felt_color: Color = Color(0.055, 0.42, 0.22)
 var felt_light: Color = Color(0.10, 0.50, 0.27)
@@ -57,6 +57,13 @@ func _compute_geometry() -> void:
 	var cy := play_rect.get_center().y
 	baulk_x = x0 + 0.20 * L                 # Baulk line: 1/5 up from baulk end.
 	d_radius = 0.16 * w                     # "D" radius ~ 0.16 of table width.
+	# Pockets and cushion openings scale with the table so they stay in
+	# proportion (and match the scaled ball size) on every screen.
+	pocket_radius = w * 0.055
+	corner_hole = pocket_radius * 0.82
+	mid_hole = pocket_radius * 0.72
+	corner_open = pocket_radius * 1.05
+	mid_open = pocket_radius * 0.86
 	spots = {
 		"green": Vector2(baulk_x, cy - d_radius),        # Left corner of the D.
 		"brown": Vector2(baulk_x, cy),                   # Middle of the baulk line.
@@ -116,12 +123,12 @@ func _draw_cushions() -> void:
 	var b := play_rect.end.y
 	var mx := play_rect.get_center().x
 	# Top / bottom rails are split by the middle pocket; sides are single.
-	_cushion(Vector2(l + CORNER_OPEN, t), Vector2(mx - MID_OPEN, t), Vector2(0, -1))
-	_cushion(Vector2(mx + MID_OPEN, t), Vector2(r - CORNER_OPEN, t), Vector2(0, -1))
-	_cushion(Vector2(l + CORNER_OPEN, b), Vector2(mx - MID_OPEN, b), Vector2(0, 1))
-	_cushion(Vector2(mx + MID_OPEN, b), Vector2(r - CORNER_OPEN, b), Vector2(0, 1))
-	_cushion(Vector2(l, t + CORNER_OPEN), Vector2(l, b - CORNER_OPEN), Vector2(-1, 0))
-	_cushion(Vector2(r, t + CORNER_OPEN), Vector2(r, b - CORNER_OPEN), Vector2(1, 0))
+	_cushion(Vector2(l + corner_open, t), Vector2(mx - mid_open, t), Vector2(0, -1))
+	_cushion(Vector2(mx + mid_open, t), Vector2(r - corner_open, t), Vector2(0, -1))
+	_cushion(Vector2(l + corner_open, b), Vector2(mx - mid_open, b), Vector2(0, 1))
+	_cushion(Vector2(mx + mid_open, b), Vector2(r - corner_open, b), Vector2(0, 1))
+	_cushion(Vector2(l, t + corner_open), Vector2(l, b - corner_open), Vector2(-1, 0))
+	_cushion(Vector2(r, t + corner_open), Vector2(r, b - corner_open), Vector2(1, 0))
 
 
 ## One cushion segment: a from/to along the nose line, `out` points to the frame.
@@ -140,7 +147,7 @@ func _draw_pockets() -> void:
 	for p in pockets:
 		var pos: Vector2 = p["pos"]
 		var is_mid: bool = absf(pos.y - play_rect.position.y) > 1.0 and absf(pos.y - play_rect.end.y) > 1.0
-		var hole: float = MID_HOLE if is_mid else CORNER_HOLE
+		var hole: float = mid_hole if is_mid else corner_hole
 		draw_circle(pos, hole + 5.0, pocket_rim)          # leather rim
 		draw_circle(pos, hole, pocket_color)              # hole
 		draw_circle(pos - Vector2(hole * 0.28, hole * 0.28), hole * 0.5, Color(0.05, 0.05, 0.05))  # subtle depth

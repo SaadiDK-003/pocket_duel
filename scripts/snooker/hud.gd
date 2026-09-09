@@ -244,10 +244,21 @@ func _mini_label(parent: Node, text: String, size: int, color: Color) -> Label:
 
 func _make_pause_button() -> void:
 	_pause = Button.new()
-	_pause.text = "‖"
-	_pause.custom_minimum_size = Vector2(62, 58)
-	_pause.size = Vector2(62, 58)
-	_pause.add_theme_font_size_override("font_size", 26)
+	_pause.text = "II"
+	_pause.custom_minimum_size = Vector2(96, 80)
+	_pause.size = Vector2(96, 80)
+	_pause.add_theme_font_size_override("font_size", 46)
+	var st := StyleBoxFlat.new()
+	st.bg_color = Color(0.11, 0.13, 0.17, 0.92)
+	st.set_corner_radius_all(18)
+	st.set_border_width_all(2)
+	st.border_color = Color(1, 1, 1, 0.12)
+	_pause.add_theme_stylebox_override("normal", st)
+	var sh := st.duplicate(); sh.bg_color = Color(0.18, 0.21, 0.26, 0.95)
+	_pause.add_theme_stylebox_override("hover", sh)
+	_pause.add_theme_stylebox_override("pressed", sh)
+	_pause.add_theme_color_override("font_color", ACCENT)
+	_pause.add_theme_color_override("font_hover_color", ACCENT)
 	_pause.pressed.connect(func(): Audio.play("ui_click"); pause_requested.emit())
 	add_child(_pause)
 

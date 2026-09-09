@@ -22,7 +22,7 @@ const STOP_SPEED: float = 10.0           # px/s — below this a ball is stopped
 const RESTITUTION_CUSHION: float = 0.78  # Energy kept on a cushion bounce.
 const RESTITUTION_BALL: float = 0.94     # Energy kept on a ball-to-ball hit.
 const MAX_SHOT_SPEED: float = 3400.0     # px/s at 100% power.
-const BALL_RADIUS: float = 18.0
+var ball_radius: float = 18.0            # Scaled to the table in _layout().
 
 # --- Spin ---
 const FOLLOW_FACTOR: float = 0.65        # Follow/draw kick as a fraction of impact speed.
@@ -158,6 +158,10 @@ func _layout() -> void:
 	var vp := get_viewport().get_visible_rect().size
 	_last_vp = vp
 	table.setup(_compute_play_rect(vp))
+	# Balls scale with the table so they're a consistent, readable size on any
+	# screen (bigger than the old fixed 18px on wide phones). Bounded by table
+	# WIDTH too, so the 15-red triangle always fits between the pink and black.
+	ball_radius = clampf(minf(table.play_rect.size.y * 0.030, table.play_rect.size.x * 0.0138), 15.0, 26.0)
 	hud.layout(vp)
 
 
@@ -414,7 +418,7 @@ func _build_balls() -> void:
 
 
 func _build_reds(pink: Vector2, count: int) -> void:
-	var spacing := BALL_RADIUS * 2.0 + 1.0          # Touching, with a hair of gap.
+	var spacing := ball_radius * 2.0 + 1.0          # Touching, with a hair of gap.
 	var row_dx := spacing * cos(deg_to_rad(30.0))   # Row-to-row spacing (~0.866).
 	var apex_x := pink.x + spacing                  # Apex just behind the pink.
 	var placed := 0
@@ -432,7 +436,7 @@ func _build_reds(pink: Vector2, count: int) -> void:
 func _spawn(type: int, value: int, color: Color, pos: Vector2) -> Ball:
 	var b := Ball.new()
 	add_child(b)
-	b.setup(type, value, color, pos, BALL_RADIUS)
+	b.setup(type, value, color, pos, ball_radius)
 	balls.append(b)
 	return b
 
@@ -509,7 +513,7 @@ func is_ball_in_hand() -> bool:
 ## semicircle), keeping the whole ball on the table.
 func clamp_to_d(pos: Vector2) -> Vector2:
 	var c := Vector2(table.baulk_x, table.play_rect.get_center().y)
-	var r := table.d_radius - BALL_RADIUS
+	var r := table.d_radius - ball_radius
 	var off := pos - c
 	if off.x > 0.0:
 		off.x = 0.0                 # Only the baulk side of the line.
@@ -650,7 +654,7 @@ func _free_spot_for(b: Ball) -> Vector2:
 		var s: Vector2 = table.spots[VALUE_SPOT[v]]
 		if _spot_free(s, b):
 			return s
-	var step := BALL_RADIUS * 2.0
+	var step := ball_radius * 2.0
 	for i in range(1, 40):
 		var up := own + Vector2(step * i, 0.0)
 		if table.play_rect.has_point(up) and _spot_free(up, b):
@@ -665,7 +669,7 @@ func _spot_free(pos: Vector2, exclude: Ball) -> bool:
 	for o in balls:
 		if o == exclude or o.is_potted:
 			continue
-		if o.position.distance_to(pos) < BALL_RADIUS * 2.0 - 0.5:
+		if o.position.distance_to(pos) < ball_radius * 2.0 - 0.5:
 			return false
 	return true
 

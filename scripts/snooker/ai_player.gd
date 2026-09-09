@@ -14,7 +14,7 @@ const AIM_ERROR := [0.10, 0.05, 0.022]   # radians, per difficulty
 
 func choose_shot(game) -> Dictionary:
 	var cue: Ball = game.cue_ball
-	var radius: float = game.BALL_RADIUS
+	var radius: float = game.ball_radius
 	var targets := _legal_targets(game)
 
 	var best: Dictionary = {}
