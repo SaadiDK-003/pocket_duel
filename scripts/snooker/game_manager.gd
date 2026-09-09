@@ -793,14 +793,12 @@ func _resolve_pockets() -> void:
 			continue
 		for p in table.pockets:
 			if b.position.distance_to(p["pos"]) <= p["radius"]:
-				_pot_ball(b)
+				_pot_ball(b, p["pos"])
 				break
 
 
-func _pot_ball(b: Ball) -> void:
-	b.is_potted = true
-	b.velocity = Vector2.ZERO
-	b.visible = false
+func _pot_ball(b: Ball, pocket_pos: Vector2) -> void:
+	b.pot_into(pocket_pos)          # is_potted = true + sink animation.
 	if b not in _potted_this_shot:
 		_potted_this_shot.append(b)
 		Audio.play("pocket")
