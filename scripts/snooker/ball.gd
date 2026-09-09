@@ -102,9 +102,11 @@ func _draw() -> void:
 		return
 	if _sinking:
 		var t := clampf(_sink_t, 0.0, 1.0)
-		# 1) Roll to the pocket mouth (reached by ~55%), accelerating in.
-		var move := minf(t / 0.55, 1.0)
-		var c := _sink_offset * (move * move)
+		# 1) Continue into the pocket smoothly — ease OUT (fast at capture, easing
+		#    into the hole) so there's no stall between rolling and dropping.
+		var mp := minf(t / 0.5, 1.0)
+		var move := 1.0 - (1.0 - mp) * (1.0 - mp)
+		var c := _sink_offset * move
 		# 2) Fall into the hole: shrink faster as it drops (t^2).
 		var s := maxf(1.0 - t * t, 0.02)
 		# 3) Darken into the pocket's shadow, and only fade right at the end.
