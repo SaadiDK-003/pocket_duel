@@ -13,7 +13,13 @@ extends Node2D
 ## priority is "make it feel good first", so expect to nudge these.
 
 # ------------------------------------------------------------------ Tunables
-const SUBSTEPS: int = 8
+# The simulation runs once per RENDERED frame (see _process) so motion is smooth
+# at the display's native refresh (60/90/120 Hz), not a fixed 60. Substeps are
+# sized to a fixed target length so collision fidelity stays constant whatever
+# the frame rate; the delta is clamped so a frame hitch can't tunnel balls.
+const SIM_SUB_DT: float = 1.0 / 480.0     # Target physics substep length (s).
+const SIM_MAX_SUBSTEPS: int = 16
+const SIM_MAX_DELTA: float = 1.0 / 30.0   # Cap the frame delta after a hitch.
 # Exponential coast: fraction of speed KEPT per second. This gives the natural
 # pool "glide" — fast at first, easing to a gentle stop — instead of the
 # abrupt halt a constant deceleration produces. Lower = more friction.
@@ -86,6 +92,7 @@ var _last_tick_sec: int = -1
 
 
 func _process(delta: float) -> void:
+	_simulate(delta)
 	if _timer_active and not _paused:
 		_shot_time_left -= delta
 		if _shot_time_left <= 0.0:
@@ -543,14 +550,19 @@ func place_cue_ball(pos: Vector2) -> void:
 
 
 # ------------------------------------------------------------------ Simulation
-func _physics_process(delta: float) -> void:
+## Advance the table once per rendered frame so motion tracks the display's
+## refresh rate. Framerate-independent: the integrator is dt-based and the
+## substep count adapts to keep each substep near SIM_SUB_DT.
+func _simulate(delta: float) -> void:
 	if _paused or not _balls_moving:
 		return
 
+	var d := minf(delta, SIM_MAX_DELTA)   # Clamp so a hitch can't tunnel balls.
+	var steps := clampi(int(ceil(d / SIM_SUB_DT)), 1, SIM_MAX_SUBSTEPS)
+	var sub := d / float(steps)
 	_frame_ball_impact = 0.0
 	_frame_cushion_impact = 0.0
-	var sub := delta / float(SUBSTEPS)
-	for _i in SUBSTEPS:
+	for _i in steps:
 		_step(sub)
 	_play_impact_sounds()
 
