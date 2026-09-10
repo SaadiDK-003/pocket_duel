@@ -234,13 +234,57 @@ func _draw_move_arrows(c: Vector2, dist: float) -> void:
 		]), col)
 
 
+## A realistic tapered snooker cue behind the ball, pulled back with power.
+## Built from stacked tapered quads: leather tip, ferrule, wood shaft, a brass
+## joint band, and a darker butt — plus a drop shadow and a top highlight. All
+## dimensions scale with the ball so the cue stays in proportion on any screen.
 func _draw_cue_stick(origin: Vector2, dir: Vector2, power: float) -> void:
-	# Cue stick behind the ball, pulled back proportional to power.
-	var pull_back: float = cue_ball.radius + 14.0 + power * 90.0
-	var tip: Vector2 = origin - dir * pull_back
-	var butt: Vector2 = tip - dir * 230.0
-	draw_line(tip, butt, GameState.cue_color(), 6.0)            # selected cue skin
-	draw_line(tip, tip - dir * 26.0, Color(0.2, 0.5, 0.7), 6.0)  # blue ferrule
+	var r: float = cue_ball.radius
+	var gap: float = r + 14.0 + power * 90.0
+	var along: Vector2 = -dir                       # tip -> butt
+	var perp: Vector2 = Vector2(-dir.y, dir.x)
+
+	var total: float = clampf(r * 25.0, 400.0, 640.0)
+	var tip_pt: Vector2 = origin - dir * gap        # striking end, near the ball
+	var butt_pt: Vector2 = tip_pt + along * total
+
+	var wood: Color = GameState.cue_color()
+	var butt_col: Color = wood.darkened(0.40)
+	var h_tip: float = maxf(r * 0.22, 3.2)          # half-width at the tip
+	var h_butt: float = maxf(r * 0.50, 8.0)         # half-width at the butt
+
+	# Stations along the length (fractions from the tip).
+	var f_ferrule: float = 16.0 / total
+	var f_shaft: float = 30.0 / total
+	var f_joint: float = 0.52
+	var h_at := func(f: float) -> float: return lerpf(h_tip, h_butt, f)
+
+	var p := func(f: float) -> Vector2: return tip_pt + along * (total * f)
+
+	# 1) Drop shadow beneath the cue.
+	var sh := perp * (h_butt * 0.6) + along * 2.0
+	draw_colored_polygon(_taper(tip_pt + sh, butt_pt + sh, h_tip, h_butt, perp), Color(0, 0, 0, 0.22))
+
+	# 2) Darker butt (grip end) from the joint back.
+	draw_colored_polygon(_taper(p.call(f_joint), butt_pt, h_at.call(f_joint), h_butt, perp), butt_col)
+	# 3) Wood shaft from just past the ferrule to the joint.
+	draw_colored_polygon(_taper(p.call(f_shaft), p.call(f_joint), h_at.call(f_shaft), h_at.call(f_joint), perp), wood)
+	# 4) Cream ferrule.
+	draw_colored_polygon(_taper(p.call(f_ferrule), p.call(f_shaft), h_at.call(f_ferrule), h_at.call(f_shaft), perp), Color(0.93, 0.92, 0.86))
+	# 5) Blue leather tip, rounded at the striking end.
+	draw_colored_polygon(_taper(tip_pt, p.call(f_ferrule), h_tip, h_at.call(f_ferrule), perp), Color(0.20, 0.34, 0.60))
+	draw_circle(tip_pt, h_tip, Color(0.20, 0.34, 0.60))
+	# 6) Brass joint band.
+	draw_colored_polygon(_taper(p.call(f_joint - 0.02), p.call(f_joint + 0.01), h_at.call(f_joint - 0.02), h_at.call(f_joint + 0.01), perp), Color(0.82, 0.67, 0.33))
+
+	# 7) Polish: a soft highlight down the top edge, a dark line down the bottom.
+	draw_line(tip_pt + perp * (h_tip * 0.45), butt_pt + perp * (h_butt * 0.45), Color(1, 1, 1, 0.16), 2.0)
+	draw_line(tip_pt - perp * h_tip, butt_pt - perp * h_butt, Color(0, 0, 0, 0.22), 1.5)
+
+
+## A tapered quad from s (half-width hs) to e (half-width he) about `perp`.
+func _taper(s: Vector2, e: Vector2, hs: float, he: float, perp: Vector2) -> PackedVector2Array:
+	return PackedVector2Array([s + perp * hs, e + perp * he, e - perp * he, s - perp * hs])
 
 
 
