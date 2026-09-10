@@ -141,14 +141,22 @@ func select_ball_set(id: String) -> void:
 
 
 ## --- Stats & achievements ---
-## Record a finished match. `human_won` is true only when a human player won
-## (the bot winning does not count as a win or extend the streak). `top_break`
-## and `pots` are this match's figures. Returns the list of achievement ids
-## newly unlocked (already rewarded with coins), so the caller can toast them.
-func record_match(human_won: bool, top_break: int, pots: int) -> Array:
-	stat_played += 1
+## Record a finished frame's figures (its top break and balls potted) so
+## break/pot achievements unlock promptly, not only at match end. Returns the
+## list of achievement ids newly unlocked (already rewarded with coins).
+func record_frame(top_break: int, pots: int) -> Array:
 	stat_pots += pots
 	stat_best_break = maxi(stat_best_break, top_break)
+	var unlocked := _check_achievements()
+	save_settings()
+	return unlocked
+
+
+## Record a finished match. `human_won` is true only when a human player won
+## (the bot winning does not count as a win or extend the streak). Returns any
+## newly unlocked achievement ids. Frame figures are logged via record_frame.
+func record_match(human_won: bool) -> Array:
+	stat_played += 1
 	if human_won:
 		stat_won += 1
 		stat_streak += 1
@@ -176,11 +184,14 @@ func _check_achievements() -> Array:
 func _achievement_met(id: String) -> bool:
 	match id:
 		"first_win": return stat_won >= 1
+		"break30": return stat_best_break >= 30
 		"fifty": return stat_best_break >= 50
 		"century": return stat_best_break >= 100
 		"pots100": return stat_pots >= 100
 		"wins3": return stat_won >= 3
+		"streak3": return stat_streak >= 3
 		"play10": return stat_played >= 10
+		"play20": return stat_played >= 20
 	return false
 
 

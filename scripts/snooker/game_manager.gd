@@ -62,7 +62,7 @@ var reds_count: int = MODES[DEFAULT_MODE]
 var _balls_moving: bool = false
 var _frame_over: bool = false
 var _match_over: bool = false
-var _match_pots: int = 0          # Object balls potted across the whole match.
+var _frame_pots: int = 0          # Object balls potted in the current frame.
 var _frame_starter: int = 0       # Who breaks the current frame (alternates).
 var _paused: bool = false
 var _ball_in_hand: bool = false          # Cue ball can be placed within the D.
@@ -206,7 +206,6 @@ func _start_mode(name: String) -> void:
 		turn.names = [GameState.names[0], GameState.names[1]]
 	_frame_starter = 0
 	_match_over = false
-	_match_pots = 0
 	_begin_frame()
 
 
@@ -230,6 +229,7 @@ func _begin_frame() -> void:
 	_frame_over = false
 	_paused = false
 	_ball_in_hand = true            # Frame starts with the cue ball in hand.
+	_frame_pots = 0
 	_potted_this_shot.clear()
 	_first_contact = null
 	_undo_stack.clear()             # Undo is scoped to the current frame.
@@ -607,7 +607,7 @@ func _evaluate_shot() -> void:
 			potted_non_cue.append(b)
 
 	var res: Dictionary = rules.evaluate(_first_contact, potted_non_cue, cue_potted)
-	_match_pots += potted_non_cue.size()
+	_frame_pots += potted_non_cue.size()
 
 	if res["foul"]:
 		turn.add_score_to(turn.other(), res["foul_value"])
@@ -702,14 +702,18 @@ func _end_frame(forced_winner: int = -1) -> void:
 
 	var top_break := maxi(turn.highest_break[0], turn.highest_break[1])
 	var needed := GameState.best_of / 2 + 1
+	# Log the frame's figures first so break/pot achievements can unlock now.
+	var unlocked: Array = GameState.record_frame(top_break, _frame_pots)
 	if turn.frames_won[winner] >= needed:
 		_match_over = true
 		var reward := 50 + top_break        # Coins for winning the match.
 		GameState.add_coins(reward)
-		# Record lifetime stats & unlock achievements (which grant their own
-		# coins). A human wins unless the bot (player 2 in vs-AI) took it.
+		# Record the match (played/won/streak) & collect any further unlocks.
+		# A human wins unless the bot (player 2 in vs-AI) took it.
 		var human_won := not (GameState.vs_ai and winner == 1)
-		var unlocked: Array = GameState.record_match(human_won, top_break, _match_pots)
+		for id in GameState.record_match(human_won):
+			if id not in unlocked:
+				unlocked.append(id)
 		_celebrate()
 		var subtitle := "%d – %d frames   ·   Top break %d   ·   +%d coins" % [
 			turn.frames_won[winner], turn.frames_won[1 - winner], top_break, reward]
@@ -727,15 +731,23 @@ func _end_frame(forced_winner: int = -1) -> void:
 			subtitle)
 	else:
 		GameState.add_coins(10)             # Coins for winning a frame.
+		var subtitle := "%d – %d   ·   match %d–%d   ·   +10 coins" % [
+			turn.scores[winner], turn.scores[1 - winner],
+			turn.frames_won[0], turn.frames_won[1]]
+		if not unlocked.is_empty():
+			var names: Array = []
+			for id in unlocked:
+				names.append(str(Achievements.LIST[id]["name"]))
+			subtitle += "\n🏅 Unlocked: %s" % ", ".join(names)
 		overlay.show_menu(
 			"%s wins the frame" % turn.names[winner],
 			[
 				{"text": "Next Frame", "callable": _next_frame},
 				{"text": "Main Menu", "callable": _quit_to_menu},
 			],
-			"%d – %d   ·   match %d–%d   ·   +10 coins" % [
-				turn.scores[winner], turn.scores[1 - winner],
-				turn.frames_won[0], turn.frames_won[1]])
+			subtitle)
+	if not unlocked.is_empty():
+		Audio.play("win")
 
 
 ## Confetti burst over the whole screen for a match win.

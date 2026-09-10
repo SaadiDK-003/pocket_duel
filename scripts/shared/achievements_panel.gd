@@ -82,8 +82,17 @@ func _build() -> void:
 	vb.add_child(stats)
 
 	_spacer(vb, 4)
+	# Scroll the (growing) list so the panel never overflows the screen.
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(700, 540)
+	vb.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.add_theme_constant_override("separation", 8)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
 	for id in Achievements.ORDER:
-		_row(vb, id, Achievements.LIST[id])
+		_row(list, id, Achievements.LIST[id])
 
 	_spacer(vb, 8)
 	var back := Button.new()
