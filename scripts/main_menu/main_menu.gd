@@ -15,6 +15,7 @@ const FIELD: Color = Color(0.06, 0.08, 0.10)
 
 var _toast: Label
 var _modal: Control
+var _settings: SettingsPanel
 
 
 func _ready() -> void:
@@ -249,63 +250,10 @@ func _begin_match(n1: String, n2: String) -> void:
 
 # ------------------------------------------------------------------ Settings
 func _show_settings() -> void:
-	var vb := _open_modal()
-	_title(vb, "SETTINGS", 48, TEXT)
-	_spacer(vb, 10)
-	_toggle_row(vb, "Sound", GameState.sound_enabled,
-		func(on): GameState.sound_enabled = on; GameState.save_settings())
-	_toggle_row(vb, "Music", GameState.music_enabled,
-		func(on): GameState.music_enabled = on; GameState.save_settings())
-	_toggle_row(vb, "Vibration", GameState.vibration_enabled,
-		func(on): GameState.vibration_enabled = on; GameState.save_settings())
-	_toggle_row(vb, "Tap to Shoot", GameState.tap_to_shoot,
-		func(on): GameState.tap_to_shoot = on; GameState.save_settings())
-	_spacer(vb, 6)
-
-	# Shot timer: cycles Off / 30s / 20s / 15s.
-	var timer_values := [0, 30, 20, 15]
-	var st_btn := _button(vb, "", func(): pass, false)
-	var st_label := func() -> String:
-		return "Shot Timer: Off" if GameState.shot_timer == 0 else "Shot Timer: %ds" % GameState.shot_timer
-	st_btn.text = st_label.call()
-	st_btn.pressed.connect(func():
-		var idx: int = timer_values.find(GameState.shot_timer)
-		GameState.shot_timer = timer_values[(idx + 1) % timer_values.size()]
-		GameState.save_settings()
-		st_btn.text = st_label.call())
-	_spacer(vb, 12)
-	_button(vb, "Reset to defaults", func(): GameState.reset_settings(); _show_settings(), false)
-	_button(vb, "Back", _close_modal, false)
-
-
-func _toggle_row(parent: Node, label: String, initial: bool, cb: Callable) -> void:
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 24)
-	h.custom_minimum_size = Vector2(560, 0)
-	var l := Label.new()
-	l.text = label
-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	l.add_theme_font_size_override("font_size", 34)
-	l.add_theme_color_override("font_color", TEXT)
-	h.add_child(l)
-
-	var t := Button.new()
-	t.toggle_mode = true
-	t.button_pressed = initial
-	t.custom_minimum_size = Vector2(150, 62)
-	t.add_theme_font_size_override("font_size", 30)
-	var upd := func():
-		t.text = "ON" if t.button_pressed else "OFF"
-		var col: Color = Color(0.22, 0.72, 0.38) if t.button_pressed else Color(0.30, 0.33, 0.37)
-		t.add_theme_stylebox_override("normal", _btn_style(col))
-		t.add_theme_stylebox_override("hover", _btn_style(col.lightened(0.08)))
-		t.add_theme_stylebox_override("pressed", _btn_style(col))
-		t.add_theme_color_override("font_color", Color(1, 1, 1))
-		t.add_theme_color_override("font_hover_color", Color(1, 1, 1))
-	upd.call()
-	t.toggled.connect(func(_p): upd.call(); Audio.play("ui_click"); cb.call(t.button_pressed))
-	h.add_child(t)
-	parent.add_child(h)
+	if not is_instance_valid(_settings):
+		_settings = SettingsPanel.new()
+		add_child(_settings)
+	_settings.open()
 
 
 func _toast_show(text: String) -> void:

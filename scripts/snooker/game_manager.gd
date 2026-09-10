@@ -50,6 +50,7 @@ var table: Table
 var cue: Cue
 var hud: Hud
 var overlay: OverlayMenu
+var settings_panel: SettingsPanel
 var turn := TurnManager.new()
 var rules := RulesManager.new()
 var ai := AIPlayer.new()
@@ -133,6 +134,8 @@ func _ready() -> void:
 	_build_hud()
 	overlay = OverlayMenu.new()
 	add_child(overlay)
+	settings_panel = SettingsPanel.new()
+	add_child(settings_panel)
 	hud.pause_requested.connect(_toggle_pause)
 	hud.shoot_pressed.connect(cue.request_fire)
 	get_viewport().size_changed.connect(_on_resize)
@@ -286,6 +289,7 @@ func _pause() -> void:
 	_cancel_ai()
 	overlay.show_menu("PAUSED", [
 		{"text": "Resume", "callable": _resume},
+		{"text": "Settings", "callable": func(): settings_panel.open()},
 		{"text": "Undo Shot", "callable": _undo},
 		{"text": "Concede Frame", "callable": _concede},
 		{"text": "Restart", "callable": _restart_frame},
