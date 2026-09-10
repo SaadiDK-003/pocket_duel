@@ -141,6 +141,18 @@ func select_ball_set(id: String) -> void:
 
 
 ## --- Stats & achievements ---
+## Note the current running break mid-turn so a milestone break (30/50/100)
+## unlocks the instant it's reached. Returns any newly unlocked ids.
+func note_break(break_value: int) -> Array:
+	if break_value <= stat_best_break:
+		return []
+	stat_best_break = break_value
+	var unlocked := _check_achievements()
+	if not unlocked.is_empty():
+		save_settings()
+	return unlocked
+
+
 ## Record a finished frame's figures (its top break and balls potted) so
 ## break/pot achievements unlock promptly, not only at match end. Returns the
 ## list of achievement ids newly unlocked (already rewarded with coins).

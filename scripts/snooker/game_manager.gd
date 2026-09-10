@@ -51,6 +51,7 @@ var cue: Cue
 var hud: Hud
 var overlay: OverlayMenu
 var settings_panel: SettingsPanel
+var toast: AchievementToast
 var turn := TurnManager.new()
 var rules := RulesManager.new()
 var ai := AIPlayer.new()
@@ -137,6 +138,8 @@ func _ready() -> void:
 	add_child(overlay)
 	settings_panel = SettingsPanel.new()
 	add_child(settings_panel)
+	toast = AchievementToast.new()
+	add_child(toast)
 	hud.pause_requested.connect(_toggle_pause)
 	hud.shoot_pressed.connect(cue.request_fire)
 	get_viewport().size_changed.connect(_on_resize)
@@ -618,6 +621,9 @@ func _evaluate_shot() -> void:
 		if res["score"] > 0:
 			turn.add_score(res["score"])
 			hud.flash("+%d" % res["score"], Color(1.0, 0.9, 0.4))
+			# Milestone breaks unlock the instant they're reached.
+			for id in GameState.note_break(turn.break_score):
+				toast.show_id(id)
 		if not res["keep_turn"]:
 			turn.switch_turn()
 			if res["score"] == 0:      # Clean miss/safety — announce the turn.
@@ -746,8 +752,6 @@ func _end_frame(forced_winner: int = -1) -> void:
 				{"text": "Main Menu", "callable": _quit_to_menu},
 			],
 			subtitle)
-	if not unlocked.is_empty():
-		Audio.play("win")
 
 
 ## Confetti burst over the whole screen for a match win.
