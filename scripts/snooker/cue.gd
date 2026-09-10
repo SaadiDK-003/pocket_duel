@@ -188,23 +188,24 @@ func _draw_prediction(origin: Vector2, dir: Vector2) -> void:
 	var r: float = cue_ball.radius
 
 	# Main aim line — solid white, to the first thing the cue ball meets.
-	draw_line(origin, contact, Color(1, 1, 1, 0.8), 2.5)
+	# antialiased so a near-horizontal thin line stays crisp (no stair-stepping).
+	draw_line(origin, contact, Color(1, 1, 1, 0.8), 2.5, true)
 
 	if hit["type"] == "ball":
 		var target: Ball = hit["target"]
-		draw_arc(contact, r, 0.0, TAU, 28, Color(1, 1, 1, 0.45), 2.0)   # ghost cue ball
+		draw_arc(contact, r, 0.0, TAU, 48, Color(1, 1, 1, 0.45), 2.0, true)   # ghost cue ball
 		# Object ball's direction (line of centres) — solid, constant colour.
 		var n: Vector2 = (target.position - contact).normalized()
-		draw_line(target.position, target.position + n * 100.0, Color(1.0, 0.82, 0.25, 0.9), 3.0)
+		draw_line(target.position, target.position + n * 100.0, Color(1.0, 0.82, 0.25, 0.9), 3.0, true)
 		# Cue ball's deflection (tangent); tiny on a full-ball stun.
 		var deflect: Vector2 = dir - dir.dot(n) * n
 		if deflect.length() > 0.06:
 			deflect = deflect.normalized()
-			draw_line(contact, contact + deflect * 72.0, Color(0.45, 0.85, 1.0, 0.7), 2.5)
+			draw_line(contact, contact + deflect * 72.0, Color(0.45, 0.85, 1.0, 0.7), 2.5, true)
 	elif hit["type"] == "cushion":
 		var nrm: Vector2 = hit["normal"]
 		var refl: Vector2 = dir - 2.0 * dir.dot(nrm) * nrm
-		draw_line(contact, contact + refl * 120.0, Color(1, 1, 1, 0.4), 2.0)
+		draw_line(contact, contact + refl * 120.0, Color(1, 1, 1, 0.4), 2.0, true)
 
 
 ## Manual dashed line (draw_dashed_line can intermittently drop the whole line).
@@ -278,8 +279,8 @@ func _draw_cue_stick(origin: Vector2, dir: Vector2, power: float) -> void:
 	draw_colored_polygon(_taper(p.call(f_joint - 0.02), p.call(f_joint + 0.01), h_at.call(f_joint - 0.02), h_at.call(f_joint + 0.01), perp), Color(0.82, 0.67, 0.33))
 
 	# 7) Polish: a soft highlight down the top edge, a dark line down the bottom.
-	draw_line(tip_pt + perp * (h_tip * 0.45), butt_pt + perp * (h_butt * 0.45), Color(1, 1, 1, 0.16), 2.0)
-	draw_line(tip_pt - perp * h_tip, butt_pt - perp * h_butt, Color(0, 0, 0, 0.22), 1.5)
+	draw_line(tip_pt + perp * (h_tip * 0.45), butt_pt + perp * (h_butt * 0.45), Color(1, 1, 1, 0.16), 2.0, true)
+	draw_line(tip_pt - perp * h_tip, butt_pt - perp * h_butt, Color(0, 0, 0, 0.22), 1.5, true)
 
 
 ## A tapered quad from s (half-width hs) to e (half-width he) about `perp`.
