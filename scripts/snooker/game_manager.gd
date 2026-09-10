@@ -62,6 +62,7 @@ var reds_count: int = MODES[DEFAULT_MODE]
 var _balls_moving: bool = false
 var _frame_over: bool = false
 var _match_over: bool = false
+var _match_pots: int = 0          # Object balls potted across the whole match.
 var _frame_starter: int = 0       # Who breaks the current frame (alternates).
 var _paused: bool = false
 var _ball_in_hand: bool = false          # Cue ball can be placed within the D.
@@ -205,6 +206,7 @@ func _start_mode(name: String) -> void:
 		turn.names = [GameState.names[0], GameState.names[1]]
 	_frame_starter = 0
 	_match_over = false
+	_match_pots = 0
 	_begin_frame()
 
 
@@ -604,6 +606,7 @@ func _evaluate_shot() -> void:
 			potted_non_cue.append(b)
 
 	var res: Dictionary = rules.evaluate(_first_contact, potted_non_cue, cue_potted)
+	_match_pots += potted_non_cue.size()
 
 	if res["foul"]:
 		turn.add_score_to(turn.other(), res["foul_value"])
@@ -702,15 +705,25 @@ func _end_frame(forced_winner: int = -1) -> void:
 		_match_over = true
 		var reward := 50 + top_break        # Coins for winning the match.
 		GameState.add_coins(reward)
+		# Record lifetime stats & unlock achievements (which grant their own
+		# coins). A human wins unless the bot (player 2 in vs-AI) took it.
+		var human_won := not (GameState.vs_ai and winner == 1)
+		var unlocked: Array = GameState.record_match(human_won, top_break, _match_pots)
 		_celebrate()
+		var subtitle := "%d – %d frames   ·   Top break %d   ·   +%d coins" % [
+			turn.frames_won[winner], turn.frames_won[1 - winner], top_break, reward]
+		if not unlocked.is_empty():
+			var names: Array = []
+			for id in unlocked:
+				names.append(str(Achievements.LIST[id]["name"]))
+			subtitle += "\n🏅 Unlocked: %s" % ", ".join(names)
 		overlay.show_menu(
 			"🏆  %s WINS!" % turn.names[winner],
 			[
 				{"text": "New Match", "callable": _restart_frame},
 				{"text": "Main Menu", "callable": _quit_to_menu},
 			],
-			"%d – %d frames   ·   Top break %d   ·   +%d coins" % [
-				turn.frames_won[winner], turn.frames_won[1 - winner], top_break, reward])
+			subtitle)
 	else:
 		GameState.add_coins(10)             # Coins for winning a frame.
 		overlay.show_menu(

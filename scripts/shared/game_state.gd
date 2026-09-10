@@ -24,6 +24,20 @@ var owned: Array = ["green", "classic"]   # Unlocked cosmetic ids (defaults free
 var selected_cloth: String = "green"
 var selected_cue: String = "classic"
 
+# --- Lifetime stats (persisted) ---
+var stat_played: int = 0         # Matches finished.
+var stat_won: int = 0            # Matches won (by a human, not the bot).
+var stat_pots: int = 0           # Total balls potted.
+var stat_best_break: int = 0     # Highest break ever.
+var stat_streak: int = 0         # Current human win streak.
+
+# --- Achievements (persisted) ---
+var achieved: Array = []         # Unlocked achievement ids.
+
+# --- Daily reward (persisted) ---
+var daily_last: String = ""      # Date (YYYY-MM-DD) the reward was last claimed.
+var daily_streak: int = 0        # Consecutive days claimed.
+
 
 func _ready() -> void:
 	load_settings()
@@ -40,6 +54,14 @@ func save_settings() -> void:
 	c.set_value("profile", "owned", owned)
 	c.set_value("profile", "selected_cloth", selected_cloth)
 	c.set_value("profile", "selected_cue", selected_cue)
+	c.set_value("stats", "played", stat_played)
+	c.set_value("stats", "won", stat_won)
+	c.set_value("stats", "pots", stat_pots)
+	c.set_value("stats", "best_break", stat_best_break)
+	c.set_value("stats", "streak", stat_streak)
+	c.set_value("stats", "achieved", achieved)
+	c.set_value("daily", "last", daily_last)
+	c.set_value("daily", "streak", daily_streak)
 	c.save(SETTINGS_PATH)
 
 
@@ -56,6 +78,14 @@ func load_settings() -> void:
 	owned = c.get_value("profile", "owned", ["green", "classic"])
 	selected_cloth = c.get_value("profile", "selected_cloth", "green")
 	selected_cue = c.get_value("profile", "selected_cue", "classic")
+	stat_played = c.get_value("stats", "played", 0)
+	stat_won = c.get_value("stats", "won", 0)
+	stat_pots = c.get_value("stats", "pots", 0)
+	stat_best_break = c.get_value("stats", "best_break", 0)
+	stat_streak = c.get_value("stats", "streak", 0)
+	achieved = c.get_value("stats", "achieved", [])
+	daily_last = c.get_value("daily", "last", "")
+	daily_streak = c.get_value("daily", "streak", 0)
 
 
 ## --- Progression helpers ---
@@ -94,6 +124,74 @@ func select_cloth(id: String) -> void:
 func select_cue(id: String) -> void:
 	selected_cue = id
 	save_settings()
+
+
+## --- Stats & achievements ---
+## Record a finished match. `human_won` is true only when a human player won
+## (the bot winning does not count as a win or extend the streak). `top_break`
+## and `pots` are this match's figures. Returns the list of achievement ids
+## newly unlocked (already rewarded with coins), so the caller can toast them.
+func record_match(human_won: bool, top_break: int, pots: int) -> Array:
+	stat_played += 1
+	stat_pots += pots
+	stat_best_break = maxi(stat_best_break, top_break)
+	if human_won:
+		stat_won += 1
+		stat_streak += 1
+	else:
+		stat_streak = 0
+	var unlocked := _check_achievements()
+	save_settings()
+	return unlocked
+
+
+## Evaluate every achievement against the current stats, unlocking and rewarding
+## any newly met. Does not save (record_match / caller saves).
+func _check_achievements() -> Array:
+	var newly: Array = []
+	for id in Achievements.ORDER:
+		if id in achieved:
+			continue
+		if _achievement_met(id):
+			achieved.append(id)
+			coins += int(Achievements.LIST[id]["reward"])
+			newly.append(id)
+	return newly
+
+
+func _achievement_met(id: String) -> bool:
+	match id:
+		"first_win": return stat_won >= 1
+		"fifty": return stat_best_break >= 50
+		"century": return stat_best_break >= 100
+		"pots100": return stat_pots >= 100
+		"wins3": return stat_won >= 3
+		"play10": return stat_played >= 10
+	return false
+
+
+## --- Daily reward ---
+func daily_available() -> bool:
+	return daily_last != _today()
+
+
+## Claim today's reward. Returns the coins granted (0 if already claimed).
+## The reward grows with the consecutive-day streak (capped), resetting if a
+## day was missed.
+func claim_daily() -> int:
+	if not daily_available():
+		return 0
+	var yesterday := Time.get_date_string_from_unix_time(Time.get_unix_time_from_system() - 86400)
+	daily_streak = daily_streak + 1 if daily_last == yesterday else 1
+	daily_last = _today()
+	var reward := 20 + mini(daily_streak - 1, 6) * 5   # 20,25,...,50 cap.
+	coins += reward
+	save_settings()
+	return reward
+
+
+func _today() -> String:
+	return Time.get_date_string_from_unix_time(int(Time.get_unix_time_from_system()))
 
 
 func reset_settings() -> void:

@@ -17,6 +17,7 @@ var _toast: Label
 var _modal: Control
 var _settings: SettingsPanel
 var _shop: ShopPanel
+var _achievements: AchievementsPanel
 var _coins: Label
 
 
@@ -57,6 +58,7 @@ func _build() -> void:
 	_button(vb, "PLAY WITH BOT", func(): _show_prematch(true), false)
 	_spacer(vb, 8)
 	_button(vb, "SHOP", _show_shop, false)
+	_button(vb, "ACHIEVEMENTS", _show_achievements, false)
 	_button(vb, "SETTINGS", _show_settings, false)
 	_button(vb, "REMOVE ADS", func(): _toast_show("Remove Ads — coming in a later phase"), false)
 	_spacer(vb, 8)
@@ -82,6 +84,10 @@ func _build() -> void:
 	_toast.add_theme_color_override("font_color", ACCENT)
 	_toast.hide()
 	add_child(_toast)
+
+	# Offer the daily reward once per day, on entering the menu.
+	if GameState.daily_available():
+		call_deferred("_show_daily")
 
 
 # ------------------------------------------------------------------ Widgets
@@ -268,6 +274,43 @@ func _show_settings() -> void:
 		_settings = SettingsPanel.new()
 		add_child(_settings)
 	_settings.open()
+
+
+func _show_achievements() -> void:
+	if not is_instance_valid(_achievements):
+		_achievements = AchievementsPanel.new()
+		add_child(_achievements)
+	_achievements.open()
+
+
+## Daily reward: a claim modal showing the streak and the coins on offer.
+func _show_daily() -> void:
+	if not GameState.daily_available():
+		return
+	var next_reward := 20 + mini(GameState.daily_streak, 6) * 5
+	var vb := _open_modal()
+	_title(vb, "DAILY REWARD", 46, ACCENT)
+	_spacer(vb, 4)
+	var info := Label.new()
+	info.text = "Come back every day for more coins!\nDay streak: %d" % (GameState.daily_streak)
+	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	info.add_theme_font_size_override("font_size", 26)
+	info.add_theme_color_override("font_color", TEXT)
+	vb.add_child(info)
+	var amt := Label.new()
+	amt.text = "🪙 +%d" % next_reward
+	amt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	amt.add_theme_font_size_override("font_size", 60)
+	amt.add_theme_color_override("font_color", ACCENT)
+	vb.add_child(amt)
+	_spacer(vb, 10)
+	_button(vb, "CLAIM", func():
+		var got := GameState.claim_daily()
+		_update_coins()
+		_close_modal()
+		if got > 0:
+			_toast_show("Daily reward claimed: +%d coins" % got), true)
+	_button(vb, "Later", _close_modal, false)
 
 
 func _show_shop() -> void:

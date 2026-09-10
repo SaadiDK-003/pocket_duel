@@ -1,0 +1,161 @@
+class_name AchievementsPanel
+extends CanvasLayer
+
+## Achievements & lifetime stats. Read-only: achievements unlock during play.
+
+signal closed
+
+const ACCENT: Color = Color(0.98, 0.78, 0.28)
+const TEXT: Color = Color(0.95, 0.96, 0.98)
+const TEXT_DIM: Color = Color(0.62, 0.67, 0.74)
+const PANEL: Color = Color(0.11, 0.14, 0.17)
+const ROW: Color = Color(0.06, 0.08, 0.10)
+const DONE: Color = Color(0.12, 0.30, 0.18)
+
+var _root: Control
+
+
+func _ready() -> void:
+	layer = 15
+	_root = Control.new()
+	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_root)
+	visible = false
+
+
+func open() -> void:
+	_build()
+	visible = true
+
+
+func close() -> void:
+	visible = false
+	closed.emit()
+
+
+func _build() -> void:
+	for c in _root.get_children():
+		c.queue_free()
+
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.85)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_root.add_child(dim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_root.add_child(center)
+
+	var pc := PanelContainer.new()
+	var st := StyleBoxFlat.new()
+	st.bg_color = PANEL
+	st.set_corner_radius_all(24)
+	st.set_border_width_all(2)
+	st.border_color = Color(1, 1, 1, 0.08)
+	pc.add_theme_stylebox_override("panel", st)
+	center.add_child(pc)
+
+	var margin := MarginContainer.new()
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 40)
+	pc.add_child(margin)
+
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 10)
+	vb.custom_minimum_size = Vector2(680, 0)
+	margin.add_child(vb)
+
+	var title := Label.new()
+	title.text = "ACHIEVEMENTS"
+	title.add_theme_font_size_override("font_size", 44)
+	title.add_theme_color_override("font_color", TEXT)
+	vb.add_child(title)
+
+	# Lifetime stats strip.
+	var stats := Label.new()
+	stats.text = "Played %d   ·   Won %d   ·   Streak %d   ·   Best break %d   ·   Pots %d" % [
+		GameState.stat_played, GameState.stat_won, GameState.stat_streak,
+		GameState.stat_best_break, GameState.stat_pots]
+	stats.add_theme_font_size_override("font_size", 22)
+	stats.add_theme_color_override("font_color", TEXT_DIM)
+	vb.add_child(stats)
+
+	_spacer(vb, 4)
+	for id in Achievements.ORDER:
+		_row(vb, id, Achievements.LIST[id])
+
+	_spacer(vb, 8)
+	var back := Button.new()
+	back.text = "Back"
+	back.custom_minimum_size = Vector2(0, 72)
+	back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	back.add_theme_font_size_override("font_size", 32)
+	back.add_theme_stylebox_override("normal", _bstyle(ACCENT))
+	back.add_theme_stylebox_override("hover", _bstyle(ACCENT.lightened(0.1)))
+	back.add_theme_stylebox_override("pressed", _bstyle(ACCENT.darkened(0.1)))
+	back.add_theme_color_override("font_color", Color(0.1, 0.1, 0.12))
+	back.add_theme_color_override("font_hover_color", Color(0.1, 0.1, 0.12))
+	back.pressed.connect(func(): Audio.play("ui_click"); close())
+	vb.add_child(back)
+
+
+func _row(parent: Node, id: String, data: Dictionary) -> void:
+	var unlocked: bool = id in GameState.achieved
+	var pc := PanelContainer.new()
+	var st := StyleBoxFlat.new()
+	st.bg_color = DONE if unlocked else ROW
+	st.set_corner_radius_all(12)
+	st.content_margin_left = 16
+	st.content_margin_right = 16
+	st.content_margin_top = 10
+	st.content_margin_bottom = 10
+	pc.add_theme_stylebox_override("panel", st)
+	parent.add_child(pc)
+
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 14)
+	pc.add_child(hb)
+
+	var icon := Label.new()
+	icon.text = "🏅" if unlocked else "🔒"
+	icon.add_theme_font_size_override("font_size", 34)
+	hb.add_child(icon)
+
+	var txt := VBoxContainer.new()
+	txt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	txt.add_theme_constant_override("separation", 0)
+	hb.add_child(txt)
+	var nm := Label.new()
+	nm.text = str(data["name"])
+	nm.add_theme_font_size_override("font_size", 28)
+	nm.add_theme_color_override("font_color", TEXT if unlocked else TEXT_DIM)
+	txt.add_child(nm)
+	var ds := Label.new()
+	ds.text = str(data["desc"])
+	ds.add_theme_font_size_override("font_size", 20)
+	ds.add_theme_color_override("font_color", TEXT_DIM)
+	txt.add_child(ds)
+
+	var rw := Label.new()
+	rw.text = ("✓" if unlocked else "🪙 %d" % int(data["reward"]))
+	rw.add_theme_font_size_override("font_size", 26)
+	rw.add_theme_color_override("font_color", ACCENT)
+	hb.add_child(rw)
+
+
+func _spacer(parent: Node, h: float) -> void:
+	var s := Control.new()
+	s.custom_minimum_size = Vector2(0, h)
+	parent.add_child(s)
+
+
+func _bstyle(bg: Color) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = bg
+	s.set_corner_radius_all(16)
+	s.content_margin_left = 24
+	s.content_margin_right = 24
+	s.content_margin_top = 12
+	s.content_margin_bottom = 12
+	return s
