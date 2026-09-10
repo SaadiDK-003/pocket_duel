@@ -64,6 +64,7 @@ var _balls_moving: bool = false
 var _frame_over: bool = false
 var _match_over: bool = false
 var _frame_pots: int = 0          # Object balls potted in the current frame.
+var _break_shot: bool = false     # Next shot is the opening break (scatter sound).
 var _frame_starter: int = 0       # Who breaks the current frame (alternates).
 var _paused: bool = false
 var _ball_in_hand: bool = false          # Cue ball can be placed within the D.
@@ -233,6 +234,7 @@ func _begin_frame() -> void:
 	_paused = false
 	_ball_in_hand = true            # Frame starts with the cue ball in hand.
 	_frame_pots = 0
+	_break_shot = true              # The first shot of the frame scatters the pack.
 	_potted_this_shot.clear()
 	_first_contact = null
 	_undo_stack.clear()             # Undo is scoped to the current frame.
@@ -587,7 +589,12 @@ func _physics_process(delta: float) -> void:
 ## the loudest such collision was — so a break sounds busy without machine-gunning.
 func _play_impact_sounds() -> void:
 	if _frame_ball_impact > 60.0:
-		Audio.play("ball_hit", _impact_db(_frame_ball_impact), 0.12)
+		if _break_shot:
+			# First real contact with the pack: play the scatter, once.
+			_break_shot = false
+			Audio.play("break", -2.0)
+		else:
+			Audio.play("ball_hit", _impact_db(_frame_ball_impact), 0.12)
 	if _frame_cushion_impact > 80.0:
 		Audio.play("cushion", _impact_db(_frame_cushion_impact), 0.10)
 
