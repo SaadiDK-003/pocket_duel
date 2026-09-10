@@ -11,7 +11,7 @@ const SFX: Dictionary = {
 	"ball_hit": "res://assets/audio/ball_hit.mp3",       # real recording
 	"cushion": "res://assets/audio/cushion.mp3",         # real recording
 	"break": "res://assets/audio/break_shot.mp3",        # real recording (opening break)
-	"pocket": "res://assets/audio/pocket.wav",
+	"pocket": "res://assets/audio/pocket.mp3",       # real recording (ball drop)
 	"win": "res://assets/audio/win.wav",
 	"achieve": "res://assets/audio/achieve.wav",
 }
