@@ -7,7 +7,7 @@ extends Node
 
 const SFX: Dictionary = {
 	"ui_click": "res://assets/audio/ui_click.wav",
-	"cue_strike": "res://assets/audio/cue_strike.wav",
+	"cue_strike": "res://assets/audio/cue_strike.mp3",   # real recording
 	"ball_hit": "res://assets/audio/ball_hit.mp3",       # real recording
 	"cushion": "res://assets/audio/cushion.mp3",         # real recording
 	"break": "res://assets/audio/break_shot.mp3",        # real recording (opening break)
