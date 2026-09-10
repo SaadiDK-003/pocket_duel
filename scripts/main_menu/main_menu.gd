@@ -55,6 +55,8 @@ func _build() -> void:
 	_spacer(vb, 8)
 	_button(vb, "SETTINGS", _show_settings, false)
 	_button(vb, "REMOVE ADS", func(): _toast_show("Remove Ads — coming in a later phase"), false)
+	_spacer(vb, 8)
+	_button(vb, "EXIT", func(): get_tree().quit(), false)
 
 	_toast = Label.new()
 	_toast.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
