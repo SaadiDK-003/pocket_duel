@@ -24,6 +24,7 @@ var spin_forward: Vector2 = Vector2.ZERO   # Shot direction, "forward" for follo
 var type: int = BallType.RED
 var value: int = 1
 var color: Color = Color(0.8, 0.08, 0.08)
+var style: String = "classic"    # Ball-set finish (see BallPainter / Cosmetics).
 var starting_position: Vector2 = Vector2.ZERO
 
 # --- Pot animation (sink into the pocket) ---
@@ -113,25 +114,6 @@ func _draw() -> void:
 		var dark := t * 0.75
 		var a := 1.0 if t < 0.82 else (1.0 - (t - 0.82) / 0.18)
 		# Highlight dims as it turns away from the light while dropping.
-		_paint(c, radius * s, a, color.lerp(Color(0.02, 0.02, 0.02), dark), 1.0 - dark)
+		BallPainter.paint(self, c, radius * s, a, color.lerp(Color(0.02, 0.02, 0.02), dark), 1.0 - dark, style)
 	else:
-		_paint(Vector2.ZERO, radius, 1.0, color, 1.0)
-
-
-## Paint the ball centred at `c`, radius `r`, opacity `a`, base colour `base`,
-## and highlight strength `hl` (dimmed while sinking).
-func _paint(c: Vector2, r: float, a: float, base: Color, hl: float) -> void:
-	# Contact shadow on the cloth (down-right of the ball).
-	draw_circle(c + Vector2(r * 0.18, r * 0.28), r * 1.02, Color(0, 0, 0, 0.28 * a))
-	# Shaded base (rim darker) then the lit face offset toward the light (top-left).
-	draw_circle(c, r, _fade(base.darkened(0.30), a))
-	draw_circle(c + Vector2(-r * 0.16, -r * 0.16), r * 0.82, _fade(base, a))
-	# Highlight glow + tight specular dot (fade out as the ball drops away).
-	draw_circle(c + Vector2(-r * 0.30, -r * 0.30), r * 0.34, _fade(base.lightened(0.35), a * hl))
-	draw_circle(c + Vector2(-r * 0.34, -r * 0.34), r * 0.15, Color(1, 1, 1, 0.75 * a * hl))
-	# Thin dark outline so balls read against the felt.
-	draw_arc(c, r, 0.0, TAU, 32, Color(0, 0, 0, 0.35 * a), 1.5, true)
-
-
-func _fade(col: Color, a: float) -> Color:
-	return Color(col.r, col.g, col.b, col.a * a)
+		BallPainter.paint(self, Vector2.ZERO, radius, 1.0, color, 1.0, style)

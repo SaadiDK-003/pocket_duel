@@ -83,6 +83,7 @@ func _build() -> void:
 
 	_section(vb, "TABLE CLOTH", Cosmetics.CLOTH_ORDER, Cosmetics.CLOTHS, "cloth", GameState.selected_cloth)
 	_section(vb, "CUE", Cosmetics.CUE_ORDER, Cosmetics.CUES, "cue", GameState.selected_cue)
+	_section(vb, "BALL SET", Cosmetics.BALL_SET_ORDER, Cosmetics.BALL_SETS, "ball", GameState.selected_ball_set)
 
 	_msg = Label.new()
 	_msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -127,7 +128,8 @@ func _swatch(kind: String, id: String, item: Dictionary, is_selected: bool) -> C
 	var b := Button.new()
 	b.custom_minimum_size = Vector2(96, 82)
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = item["color"]
+	# Ball sets show a ball preview on a dark bed; cloths/cues fill with the colour.
+	sb.bg_color = Color(0.06, 0.08, 0.10) if kind == "ball" else item["color"]
 	sb.set_corner_radius_all(12)
 	sb.set_border_width_all(4 if is_selected else 1)
 	sb.border_color = ACCENT if is_selected else Color(1, 1, 1, 0.15)
@@ -135,6 +137,13 @@ func _swatch(kind: String, id: String, item: Dictionary, is_selected: bool) -> C
 	b.add_theme_stylebox_override("hover", sb)
 	b.add_theme_stylebox_override("pressed", sb)
 	b.pressed.connect(func(): _pick(kind, id, item["price"]))
+	if kind == "ball":
+		var prev := BallPreview.new()
+		prev.base = item["color"]
+		prev.style = item["style"]
+		prev.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		prev.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(prev)
 	box.add_child(b)
 
 	var lbl := Label.new()
@@ -167,10 +176,10 @@ func _pick(kind: String, id: String, price: int) -> void:
 
 
 func _select(kind: String, id: String) -> void:
-	if kind == "cloth":
-		GameState.select_cloth(id)
-	else:
-		GameState.select_cue(id)
+	match kind:
+		"cloth": GameState.select_cloth(id)
+		"cue": GameState.select_cue(id)
+		"ball": GameState.select_ball_set(id)
 
 
 func _bstyle(bg: Color) -> StyleBoxFlat:

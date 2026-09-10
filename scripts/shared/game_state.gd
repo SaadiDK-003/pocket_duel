@@ -20,9 +20,10 @@ var shot_timer: int = 0          # Seconds per shot (0 = off).
 
 # --- Progression (persisted) ---
 var coins: int = 0
-var owned: Array = ["green", "classic"]   # Unlocked cosmetic ids (defaults free).
+var owned: Array = ["green", "classic", "set_classic"]   # Unlocked ids (defaults free).
 var selected_cloth: String = "green"
 var selected_cue: String = "classic"
+var selected_ball_set: String = "set_classic"
 
 # --- Lifetime stats (persisted) ---
 var stat_played: int = 0         # Matches finished.
@@ -54,6 +55,7 @@ func save_settings() -> void:
 	c.set_value("profile", "owned", owned)
 	c.set_value("profile", "selected_cloth", selected_cloth)
 	c.set_value("profile", "selected_cue", selected_cue)
+	c.set_value("profile", "selected_ball_set", selected_ball_set)
 	c.set_value("stats", "played", stat_played)
 	c.set_value("stats", "won", stat_won)
 	c.set_value("stats", "pots", stat_pots)
@@ -75,9 +77,12 @@ func load_settings() -> void:
 	tap_to_shoot = c.get_value("gameplay", "tap_to_shoot", true)
 	shot_timer = c.get_value("gameplay", "shot_timer", 0)
 	coins = c.get_value("profile", "coins", 0)
-	owned = c.get_value("profile", "owned", ["green", "classic"])
+	owned = c.get_value("profile", "owned", ["green", "classic", "set_classic"])
 	selected_cloth = c.get_value("profile", "selected_cloth", "green")
 	selected_cue = c.get_value("profile", "selected_cue", "classic")
+	selected_ball_set = c.get_value("profile", "selected_ball_set", "set_classic")
+	if "set_classic" not in owned:      # Ensure the free default is always owned.
+		owned.append("set_classic")
 	stat_played = c.get_value("stats", "played", 0)
 	stat_won = c.get_value("stats", "won", 0)
 	stat_pots = c.get_value("stats", "pots", 0)
@@ -95,6 +100,10 @@ func cloth_color() -> Color:
 
 func cue_color() -> Color:
 	return Cosmetics.CUES.get(selected_cue, Cosmetics.CUES["classic"])["color"]
+
+
+func ball_style() -> String:
+	return Cosmetics.BALL_SETS.get(selected_ball_set, Cosmetics.BALL_SETS["set_classic"])["style"]
 
 
 func is_owned(id: String) -> bool:
@@ -123,6 +132,11 @@ func select_cloth(id: String) -> void:
 
 func select_cue(id: String) -> void:
 	selected_cue = id
+	save_settings()
+
+
+func select_ball_set(id: String) -> void:
+	selected_ball_set = id
 	save_settings()
 
 

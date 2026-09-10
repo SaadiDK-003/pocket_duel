@@ -442,6 +442,7 @@ func _build_reds(pink: Vector2, count: int) -> void:
 func _spawn(type: int, value: int, color: Color, pos: Vector2) -> Ball:
 	var b := Ball.new()
 	add_child(b)
+	b.style = GameState.ball_style()
 	b.setup(type, value, color, pos, ball_radius)
 	balls.append(b)
 	return b

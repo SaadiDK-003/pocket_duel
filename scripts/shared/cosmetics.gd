@@ -21,3 +21,13 @@ const CUES: Dictionary = {
 	"azure":   {"name": "Azure",   "price": 150, "color": Color(0.20, 0.42, 0.78)},
 }
 const CUE_ORDER: Array = ["classic", "maple", "ebony", "crimson", "azure"]
+
+## Ball sets change the finish (rendered by BallPainter) applied to every ball.
+## `style` is the finish key; `color` is the swatch/preview base (a red ball).
+const BALL_SETS: Dictionary = {
+	"set_classic": {"name": "Classic", "price": 0,   "style": "classic", "color": Color(0.80, 0.09, 0.09)},
+	"set_matte":   {"name": "Matte",   "price": 120, "style": "matte",   "color": Color(0.80, 0.09, 0.09)},
+	"set_marble":  {"name": "Marble",  "price": 180, "style": "marble",  "color": Color(0.80, 0.09, 0.09)},
+	"set_neon":    {"name": "Neon",    "price": 240, "style": "neon",    "color": Color(0.90, 0.12, 0.12)},
+}
+const BALL_SET_ORDER: Array = ["set_classic", "set_matte", "set_marble", "set_neon"]
