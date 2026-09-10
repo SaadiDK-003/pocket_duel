@@ -51,18 +51,21 @@ func _build() -> void:
 	vb.custom_minimum_size = Vector2(600, 0)
 	center.add_child(vb)
 
-	_title(vb, "POCKET DUEL", 112, TEXT)
-	_title(vb, "SNOOKER", 40, ACCENT)
-	_spacer(vb, 30)
+	_title(vb, "POCKET DUEL", 96, TEXT)
+	_title(vb, "SNOOKER", 36, ACCENT)
+	_spacer(vb, 22)
 	_button(vb, "PLAY WITH HUMAN", func(): _show_prematch(false), true)
 	_button(vb, "PLAY WITH BOT", func(): _show_prematch(true), false)
-	_spacer(vb, 8)
-	_button(vb, "SHOP", _show_shop, false)
-	_button(vb, "ACHIEVEMENTS", _show_achievements, false)
-	_button(vb, "SETTINGS", _show_settings, false)
-	_button(vb, "REMOVE ADS", func(): _toast_show("Remove Ads — coming in a later phase"), false)
-	_spacer(vb, 8)
-	_button(vb, "EXIT", func(): get_tree().quit(), false)
+	_spacer(vb, 6)
+	# Secondary actions in a compact 2-column grid so the menu stays short.
+	var r1 := _row(vb)
+	_small(_button(r1, "SHOP", _show_shop, false))
+	_small(_button(r1, "ACHIEVEMENTS", _show_achievements, false))
+	var r2 := _row(vb)
+	_small(_button(r2, "SETTINGS", _show_settings, false))
+	_small(_button(r2, "REMOVE ADS", func(): _toast_show("Remove Ads — coming in a later phase"), false))
+	_spacer(vb, 6)
+	_small(_button(vb, "EXIT", func(): get_tree().quit(), false))
 
 	# Coin balance, top-right.
 	_coins = Label.new()
@@ -77,7 +80,7 @@ func _build() -> void:
 
 	_toast = Label.new()
 	_toast.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	_toast.position += Vector2(-300, -70)
+	_toast.position += Vector2(-300, -28)
 	_toast.size = Vector2(600, 40)
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_toast.add_theme_font_size_override("font_size", 28)
@@ -104,6 +107,22 @@ func _spacer(parent: Node, h: float) -> void:
 	var s := Control.new()
 	s.custom_minimum_size = Vector2(0, h)
 	parent.add_child(s)
+
+
+## A horizontal row for a 2-column grid of buttons.
+func _row(parent: Node) -> HBoxContainer:
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 12)
+	hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(hb)
+	return hb
+
+
+## Shrink a secondary button so the grid stays compact.
+func _small(b: Button) -> Button:
+	b.custom_minimum_size = Vector2(0, 66)
+	b.add_theme_font_size_override("font_size", 27)
+	return b
 
 
 func _btn_style(bg: Color) -> StyleBoxFlat:
