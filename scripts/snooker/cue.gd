@@ -239,7 +239,7 @@ func _draw_cue_stick(origin: Vector2, dir: Vector2, power: float) -> void:
 	var pull_back: float = cue_ball.radius + 14.0 + power * 90.0
 	var tip: Vector2 = origin - dir * pull_back
 	var butt: Vector2 = tip - dir * 230.0
-	draw_line(tip, butt, Color(0.86, 0.66, 0.36), 6.0)
+	draw_line(tip, butt, GameState.cue_color(), 6.0)            # selected cue skin
 	draw_line(tip, tip - dir * 26.0, Color(0.2, 0.5, 0.7), 6.0)  # blue ferrule
 
 

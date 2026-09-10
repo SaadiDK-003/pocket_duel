@@ -45,6 +45,12 @@ var pocket_rim: Color = Color(0.11, 0.09, 0.07)
 
 func setup(rect: Rect2) -> void:
 	play_rect = rect
+	# Apply the selected table cloth (felt + cushions derive from one colour).
+	felt_color = GameState.cloth_color()
+	felt_light = felt_color.lightened(0.16)
+	felt_dark = felt_color.darkened(0.34)
+	cushion_color = felt_color.darkened(0.20)
+	cushion_top = felt_color.lightened(0.24)
 	_compute_geometry()
 	_build_pockets()
 	queue_redraw()

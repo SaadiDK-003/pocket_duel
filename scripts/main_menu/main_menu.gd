@@ -16,6 +16,8 @@ const FIELD: Color = Color(0.06, 0.08, 0.10)
 var _toast: Label
 var _modal: Control
 var _settings: SettingsPanel
+var _shop: ShopPanel
+var _coins: Label
 
 
 func _ready() -> void:
@@ -54,10 +56,22 @@ func _build() -> void:
 	_button(vb, "PLAY WITH HUMAN", func(): _show_prematch(false), true)
 	_button(vb, "PLAY WITH BOT", func(): _show_prematch(true), false)
 	_spacer(vb, 8)
+	_button(vb, "SHOP", _show_shop, false)
 	_button(vb, "SETTINGS", _show_settings, false)
 	_button(vb, "REMOVE ADS", func(): _toast_show("Remove Ads — coming in a later phase"), false)
 	_spacer(vb, 8)
 	_button(vb, "EXIT", func(): get_tree().quit(), false)
+
+	# Coin balance, top-right.
+	_coins = Label.new()
+	_coins.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	_coins.position += Vector2(-260, 30)
+	_coins.size = Vector2(220, 40)
+	_coins.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_coins.add_theme_font_size_override("font_size", 34)
+	_coins.add_theme_color_override("font_color", ACCENT)
+	add_child(_coins)
+	_update_coins()
 
 	_toast = Label.new()
 	_toast.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
@@ -254,6 +268,18 @@ func _show_settings() -> void:
 		_settings = SettingsPanel.new()
 		add_child(_settings)
 	_settings.open()
+
+
+func _show_shop() -> void:
+	if not is_instance_valid(_shop):
+		_shop = ShopPanel.new()
+		add_child(_shop)
+		_shop.closed.connect(_update_coins)
+	_shop.open()
+
+
+func _update_coins() -> void:
+	_coins.text = "🪙 %d" % GameState.coins
 
 
 func _toast_show(text: String) -> void:

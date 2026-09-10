@@ -700,6 +700,8 @@ func _end_frame(forced_winner: int = -1) -> void:
 	var needed := GameState.best_of / 2 + 1
 	if turn.frames_won[winner] >= needed:
 		_match_over = true
+		var reward := 50 + top_break        # Coins for winning the match.
+		GameState.add_coins(reward)
 		_celebrate()
 		overlay.show_menu(
 			"🏆  %s WINS!" % turn.names[winner],
@@ -707,18 +709,19 @@ func _end_frame(forced_winner: int = -1) -> void:
 				{"text": "New Match", "callable": _restart_frame},
 				{"text": "Main Menu", "callable": _quit_to_menu},
 			],
-			"%d – %d frames   ·   Top break %d" % [
-				turn.frames_won[winner], turn.frames_won[1 - winner], top_break])
+			"%d – %d frames   ·   Top break %d   ·   +%d coins" % [
+				turn.frames_won[winner], turn.frames_won[1 - winner], top_break, reward])
 	else:
+		GameState.add_coins(10)             # Coins for winning a frame.
 		overlay.show_menu(
 			"%s wins the frame" % turn.names[winner],
 			[
 				{"text": "Next Frame", "callable": _next_frame},
 				{"text": "Main Menu", "callable": _quit_to_menu},
 			],
-			"%d – %d   ·   match %d–%d   ·   top break %d" % [
+			"%d – %d   ·   match %d–%d   ·   +10 coins" % [
 				turn.scores[winner], turn.scores[1 - winner],
-				turn.frames_won[0], turn.frames_won[1], top_break])
+				turn.frames_won[0], turn.frames_won[1]])
 
 
 ## Confetti burst over the whole screen for a match win.
