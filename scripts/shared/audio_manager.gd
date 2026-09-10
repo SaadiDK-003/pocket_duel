@@ -12,6 +12,7 @@ const SFX: Dictionary = {
 	"cushion": "res://assets/audio/cushion.wav",
 	"pocket": "res://assets/audio/pocket.wav",
 	"win": "res://assets/audio/win.wav",
+	"achieve": "res://assets/audio/achieve.wav",
 }
 const POOL_SIZE: int = 8
 

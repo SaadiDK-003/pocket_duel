@@ -84,7 +84,7 @@ func _next() -> void:
 	_wrap.visible = true
 	_wrap.position.y = -220
 
-	Audio.play("win")
+	Audio.play("achieve")
 	var tw := create_tween()
 	tw.tween_property(_wrap, "position:y", 24.0, 0.35) \
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
