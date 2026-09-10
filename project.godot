@@ -18,7 +18,7 @@ config/name="Pocket Duel"
 config/description="Local two-player snooker."
 run/main_scene="res://scenes/main_menu/main_menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
-config/icon="res://icon.svg"
+config/icon="res://assets/icons/icon.png"
 
 [autoload]
 
