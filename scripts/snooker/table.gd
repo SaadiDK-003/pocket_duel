@@ -135,10 +135,10 @@ func _build_pockets() -> void:
 		var is_mid := absf(pos.x - c.x) < 1.0
 		if is_mid:
 			var outv := Vector2(0.0, signf(pos.y - c.y))
-			var seat := pos + outv * (pocket_radius * 0.85)   # scales with pocket size
+			var seat := pos + outv * (pocket_radius * 0.80)   # scales with pocket size
 			pockets.append({
 				"pos": pos, "radius": pocket_radius, "mid": true,
-				"visual": seat, "capture": seat, "cap_r": pocket_radius * 0.90,
+				"visual": seat, "capture": seat, "cap_r": pocket_radius * 1.00,
 			})
 		else:
 			var outv := Vector2(signf(pos.x - c.x), signf(pos.y - c.y)).normalized()
@@ -239,24 +239,37 @@ func _append_fillet(pts: PackedVector2Array, prev: Vector2, corner: Vector2, nex
 
 
 func _draw_pockets() -> void:
-	# A single clean dark opening per pocket (no fat metal ring), seated into the
-	# rail — matching the reference table.
 	for p in pockets:
 		var hole: float = (mid_hole if p["mid"] else corner_hole) * 1.18
-		_draw_pocket(p["visual"], hole)
+		# The silver sits only on the OUTER side of the hole (toward the wood),
+		# like the reference — a half-ring, not a full collar.
+		var outward: Vector2 = p["visual"] - p["pos"]
+		outward = outward.normalized() if outward.length() > 0.1 else Vector2(0, 1)
+		_draw_pocket(p["visual"], hole, outward)
 
 
-## A pocket: a brushed-silver metal plate (soft vertical bevel, like the
-## reference table) with a clean black hole punched through it.
-func _draw_pocket(pos: Vector2, hole: float) -> void:
-	var plate := hole * 1.42
-	draw_circle(pos + Vector2(0, plate * 0.08), plate * 1.05, Color(0, 0, 0, 0.30))   # drop shadow
-	draw_circle(pos, plate, Color(0.66, 0.68, 0.72))                                  # metal base
-	draw_circle(pos - Vector2(0, plate * 0.16), plate * 0.92, Color(0.82, 0.84, 0.88))  # upper sheen
-	draw_circle(pos + Vector2(0, plate * 0.30), plate * 0.66, Color(0.50, 0.52, 0.58))  # lower shade
-	draw_arc(pos, plate, 0.0, TAU, 48, Color(0.30, 0.32, 0.38), 2.0, true)            # rim
-	draw_circle(pos, hole, Color(0.01, 0.01, 0.015))                                 # the hole
-	draw_arc(pos, hole, 0.0, TAU, 40, Color(0, 0, 0, 0.8), 3.0, true)                 # inner rim
+## A pocket: a brushed-silver metal half-ring on the OUTER side, with a clean
+## black hole. The felt/cushion side has no metal (matches the reference).
+func _draw_pocket(pos: Vector2, hole: float, outward: Vector2) -> void:
+	var plate := hole * 1.34
+	var ang := outward.angle()
+	var a0 := ang - PI * 0.62
+	var a1 := ang + PI * 0.62
+	_sector(pos + outward * 2.0, plate * 1.05, a0, a1, Color(0, 0, 0, 0.28))   # shadow
+	_sector(pos, plate, a0, a1, Color(0.70, 0.72, 0.76))                       # metal base
+	_sector(pos, plate * 0.87, a0, a1, Color(0.55, 0.57, 0.62))               # darker inner band
+	draw_arc(pos, plate * 0.96, a0, a1, 28, Color(0.90, 0.92, 0.96), 2.5, true)  # bright outer rim
+	draw_circle(pos, hole, Color(0.01, 0.01, 0.015))                          # the hole
+	draw_arc(pos, hole, 0.0, TAU, 40, Color(0, 0, 0, 0.75), 3.0, true)         # inner rim
+
+
+## Filled pie/sector centred at `center`, radius `radius`, from angle a0 to a1.
+func _sector(center: Vector2, radius: float, a0: float, a1: float, col: Color) -> void:
+	var pts := PackedVector2Array([center])
+	for i in range(21):
+		var a: float = lerpf(a0, a1, i / 20.0)
+		pts.append(center + Vector2(cos(a), sin(a)) * radius)
+	draw_colored_polygon(pts, col)
 
 
 ## Wood grain: fine streaks running ACROSS each rail (like the reference), dense

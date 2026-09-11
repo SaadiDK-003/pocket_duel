@@ -940,7 +940,7 @@ func _resolve_cushions() -> void:
 		# Open a gap in the top/bottom cushion at the middle pocket so a ball
 		# aimed into it can cross the rail line and drop (a rail-hugging ball
 		# outside this narrow mouth still bounces normally).
-		var in_mid_mouth := absf(b.position.x - r.get_center().x) < table.pocket_radius * 0.85
+		var in_mid_mouth := absf(b.position.x - r.get_center().x) < table.pocket_radius * 0.95
 		if b.position.x < left:
 			b.position.x = left
 			_frame_cushion_impact = maxf(_frame_cushion_impact, absf(b.velocity.x))
