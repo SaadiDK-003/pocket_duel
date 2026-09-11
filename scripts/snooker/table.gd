@@ -95,8 +95,8 @@ func _compute_geometry() -> void:
 	pocket_radius = w * 0.055
 	corner_hole = pocket_radius * 0.82
 	mid_hole = pocket_radius * 0.72
-	corner_open = pocket_radius * 1.05
-	mid_open = pocket_radius * 0.86
+	corner_open = pocket_radius * 0.92
+	mid_open = pocket_radius * 0.74
 	spots = {
 		"green": Vector2(baulk_x, cy - d_radius),        # Left corner of the D.
 		"brown": Vector2(baulk_x, cy),                   # Middle of the baulk line.
@@ -110,14 +110,30 @@ func _compute_geometry() -> void:
 func _build_pockets() -> void:
 	var r := play_rect
 	var mid_x := r.position.x + r.size.x * 0.5
-	pockets = [
-		{"pos": r.position, "radius": pocket_radius},                         # top-left
-		{"pos": Vector2(mid_x, r.position.y), "radius": pocket_radius},        # top-middle
-		{"pos": Vector2(r.end.x, r.position.y), "radius": pocket_radius},      # top-right
-		{"pos": Vector2(r.position.x, r.end.y), "radius": pocket_radius},      # bottom-left
-		{"pos": Vector2(mid_x, r.end.y), "radius": pocket_radius},             # bottom-middle
-		{"pos": r.end, "radius": pocket_radius},                              # bottom-right
+	var c := r.get_center()
+	var raw: Array[Vector2] = [
+		r.position, Vector2(mid_x, r.position.y), Vector2(r.end.x, r.position.y),
+		Vector2(r.position.x, r.end.y), Vector2(mid_x, r.end.y), r.end,
 	]
+	pockets = []
+	for pos in raw:
+		# `pos` is the physics capture point (ball centre bounds corner). The
+		# VISIBLE hole is seated a little OUTWARD into the rail (like a real
+		# pocket dipping into the cushion) — and the ball sinks toward this same
+		# `visual` point, so the drop drops into the hole you see.
+		var is_mid := absf(pos.y - r.position.y) > 1.0 and absf(pos.y - r.end.y) > 1.0
+		var outv: Vector2
+		var push: float
+		if is_mid:
+			outv = Vector2(0.0, signf(pos.y - c.y))
+			push = CUSHION_W * 0.75
+		else:
+			outv = Vector2(signf(pos.x - c.x), signf(pos.y - c.y)).normalized()
+			push = CUSHION_W * 0.80
+		pockets.append({
+			"pos": pos, "radius": pocket_radius,
+			"visual": pos + outv * push, "mid": is_mid,
+		})
 
 
 func _draw() -> void:
@@ -185,36 +201,20 @@ func _cushion(a: Vector2, b: Vector2, out: Vector2) -> void:
 
 
 func _draw_pockets() -> void:
-	var c := play_rect.get_center()
+	# A single clean dark opening per pocket (no fat metal ring), seated into the
+	# rail — matching the reference table.
 	for p in pockets:
-		var pos: Vector2 = p["pos"]
-		var is_mid: bool = absf(pos.y - play_rect.position.y) > 1.0 and absf(pos.y - play_rect.end.y) > 1.0
-		var hole: float = mid_hole if is_mid else corner_hole
-		# Seat the visible hole OUTWARD into the corner/rail (the physics capture
-		# point stays at `pos`; the hole is big enough to still cover it). This
-		# removes the felt sliver that made the pocket look like two holes.
-		var outv: Vector2
-		var push: float
-		if is_mid:
-			outv = Vector2(0.0, signf(pos.y - c.y))
-			push = CUSHION_W * 0.55
-		else:
-			outv = Vector2(signf(pos.x - c.x), signf(pos.y - c.y)).normalized()
-			push = CUSHION_W * 0.60
-		_chrome_pocket(pos + outv * push, hole)
+		var hole: float = (mid_hole if p["mid"] else corner_hole) * 1.18
+		_draw_pocket(p["visual"], hole)
 
 
-## A shiny chrome pocket fitting with the black hole in it (8-ball-pool style).
-func _chrome_pocket(pos: Vector2, hole: float) -> void:
-	var collar := hole * 1.40
-	draw_circle(pos + Vector2(0, collar * 0.10), collar * 1.05, Color(0, 0, 0, 0.22))  # shadow on wood
-	draw_circle(pos, collar, chrome_base)                                              # metal base
-	draw_circle(pos - Vector2(collar * 0.30, collar * 0.30), collar * 0.82, chrome_hi) # top-left sheen
-	draw_circle(pos + Vector2(collar * 0.30, collar * 0.30), collar * 0.80, chrome_lo) # bottom-right shade
-	draw_arc(pos, collar, 0.0, TAU, 48, chrome_lo.darkened(0.1), 2.0, true)            # rim definition
-	draw_circle(pos, hole, pocket_color)                                              # the hole
-	draw_circle(pos - Vector2(hole * 0.22, hole * 0.22), hole * 0.55, Color(0.06, 0.06, 0.07))  # depth
-	draw_arc(pos, hole, 0.0, TAU, 40, Color(0, 0, 0, 0.7), 2.0, true)                  # inner rim
+## One clean dark pocket opening with a soft rim and a thin metal edge.
+func _draw_pocket(pos: Vector2, hole: float) -> void:
+	draw_circle(pos, hole * 1.16, Color(0, 0, 0, 0.35))                 # soft shadow into the felt/wood
+	draw_circle(pos, hole * 1.05, Color(0.10, 0.11, 0.13))             # dark rim
+	draw_arc(pos, hole * 1.05, 0.0, TAU, 44, Color(0.60, 0.63, 0.68, 0.55), 2.0, true)  # thin silver edge
+	draw_circle(pos, hole, Color(0.015, 0.015, 0.02))                 # the hole (near-black)
+	draw_circle(pos - Vector2(hole * 0.20, hole * 0.20), hole * 0.55, Color(0.05, 0.05, 0.06))  # faint depth
 
 
 ## Sight dots (diamonds) evenly spaced along the wooden rails.

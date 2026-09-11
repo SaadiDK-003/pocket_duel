@@ -849,7 +849,8 @@ func _resolve_pockets() -> void:
 			continue
 		for p in table.pockets:
 			if b.position.distance_to(p["pos"]) <= p["radius"]:
-				_pot_ball(b, p["pos"])
+				# Sink toward the VISIBLE hole centre so the drop lands in the hole.
+				_pot_ball(b, p.get("visual", p["pos"]))
 				break
 
 
