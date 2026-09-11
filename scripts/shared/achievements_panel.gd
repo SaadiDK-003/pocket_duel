@@ -58,17 +58,22 @@ func _build() -> void:
 
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 40)
+		margin.add_theme_constant_override("margin_" + side, 48)
 	pc.add_child(margin)
 
+	# Fill most of the screen instead of a tiny centred box; 2 columns when wide.
+	var vp := get_viewport().get_visible_rect().size
+	var content_w := clampf(vp.x * 0.88, 640.0, 1600.0)
+	var cols := 2 if content_w > 760.0 else 1
+
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 10)
-	vb.custom_minimum_size = Vector2(680, 0)
+	vb.add_theme_constant_override("separation", 14)
+	vb.custom_minimum_size = Vector2(content_w, 0)
 	margin.add_child(vb)
 
 	var title := Label.new()
 	title.text = "ACHIEVEMENTS"
-	title.add_theme_font_size_override("font_size", 44)
+	title.add_theme_font_size_override("font_size", 52)
 	title.add_theme_color_override("font_color", TEXT)
 	vb.add_child(title)
 
@@ -77,7 +82,7 @@ func _build() -> void:
 	stats.text = "Played %d   ·   Won %d   ·   Streak %d   ·   Best break %d   ·   Pots %d" % [
 		GameState.stat_played, GameState.stat_won, GameState.stat_streak,
 		GameState.stat_best_break, GameState.stat_pots]
-	stats.add_theme_font_size_override("font_size", 22)
+	stats.add_theme_font_size_override("font_size", 26)
 	stats.add_theme_color_override("font_color", TEXT_DIM)
 	vb.add_child(stats)
 
@@ -85,19 +90,21 @@ func _build() -> void:
 	# Scroll the (growing) list so the panel never overflows the screen.
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size = Vector2(700, 540)
+	scroll.custom_minimum_size = Vector2(content_w, clampf(vp.y * 0.52, 340.0, 660.0))
 	vb.add_child(scroll)
-	var list := VBoxContainer.new()
-	list.add_theme_constant_override("separation", 8)
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(list)
+	var grid := GridContainer.new()
+	grid.columns = cols
+	grid.add_theme_constant_override("h_separation", 14)
+	grid.add_theme_constant_override("v_separation", 12)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(grid)
 	for id in Achievements.ORDER:
-		_row(list, id, Achievements.LIST[id])
+		_row(grid, id, Achievements.LIST[id])
 
 	_spacer(vb, 8)
 	var back := Button.new()
 	back.text = "Back"
-	back.custom_minimum_size = Vector2(0, 72)
+	back.custom_minimum_size = Vector2(0, 78)
 	back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	back.add_theme_font_size_override("font_size", 32)
 	back.add_theme_stylebox_override("normal", _bstyle(ACCENT))
@@ -119,36 +126,39 @@ func _row(parent: Node, id: String, data: Dictionary) -> void:
 	st.content_margin_right = 16
 	st.content_margin_top = 10
 	st.content_margin_bottom = 10
+	st.content_margin_top = 14
+	st.content_margin_bottom = 14
 	pc.add_theme_stylebox_override("panel", st)
+	pc.size_flags_horizontal = Control.SIZE_EXPAND_FILL   # fill the grid column
 	parent.add_child(pc)
 
 	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 14)
+	hb.add_theme_constant_override("separation", 16)
 	pc.add_child(hb)
 
 	var icon := Label.new()
 	icon.text = "🏅" if unlocked else "🔒"
-	icon.add_theme_font_size_override("font_size", 34)
+	icon.add_theme_font_size_override("font_size", 40)
 	hb.add_child(icon)
 
 	var txt := VBoxContainer.new()
 	txt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	txt.add_theme_constant_override("separation", 0)
+	txt.add_theme_constant_override("separation", 2)
 	hb.add_child(txt)
 	var nm := Label.new()
 	nm.text = str(data["name"])
-	nm.add_theme_font_size_override("font_size", 28)
+	nm.add_theme_font_size_override("font_size", 32)
 	nm.add_theme_color_override("font_color", TEXT if unlocked else TEXT_DIM)
 	txt.add_child(nm)
 	var ds := Label.new()
 	ds.text = str(data["desc"])
-	ds.add_theme_font_size_override("font_size", 20)
+	ds.add_theme_font_size_override("font_size", 23)
 	ds.add_theme_color_override("font_color", TEXT_DIM)
 	txt.add_child(ds)
 
 	var rw := Label.new()
 	rw.text = ("✓" if unlocked else "🪙 %d" % int(data["reward"]))
-	rw.add_theme_font_size_override("font_size", 26)
+	rw.add_theme_font_size_override("font_size", 30)
 	rw.add_theme_color_override("font_color", ACCENT)
 	hb.add_child(rw)
 

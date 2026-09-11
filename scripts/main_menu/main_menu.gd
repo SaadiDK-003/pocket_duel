@@ -47,7 +47,9 @@ func _build() -> void:
 	var vb := VBoxContainer.new()
 	vb.alignment = BoxContainer.ALIGNMENT_CENTER
 	vb.add_theme_constant_override("separation", 16)
-	vb.custom_minimum_size = Vector2(600, 0)
+	# Wider on a landscape phone so the menu fills more of the screen.
+	var vpw := get_viewport().get_visible_rect().size.x
+	vb.custom_minimum_size = Vector2(clampf(vpw * 0.5, 600.0, 900.0), 0)
 	center.add_child(vb)
 
 	_title(vb, "POCKET DUEL", 96, TEXT)
@@ -199,8 +201,10 @@ func _open_modal() -> VBoxContainer:
 	pc.add_child(margin)
 
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 16)
-	vb.custom_minimum_size = Vector2(560, 0)
+	vb.add_theme_constant_override("separation", 18)
+	# Wider on a landscape screen instead of a tiny centred box.
+	var vp := get_viewport().get_visible_rect().size
+	vb.custom_minimum_size = Vector2(clampf(vp.x * 0.6, 560.0, 1000.0), 0)
 	margin.add_child(vb)
 	return vb
 
@@ -213,9 +217,10 @@ func _close_modal() -> void:
 func _field(parent: Node, placeholder: String) -> LineEdit:
 	var le := LineEdit.new()
 	le.placeholder_text = placeholder
-	le.custom_minimum_size = Vector2(560, 66)
+	le.custom_minimum_size = Vector2(0, 74)
+	le.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	le.max_length = 16
-	le.add_theme_font_size_override("font_size", 30)
+	le.add_theme_font_size_override("font_size", 32)
 	var st := StyleBoxFlat.new()
 	st.bg_color = FIELD
 	st.set_corner_radius_all(12)
