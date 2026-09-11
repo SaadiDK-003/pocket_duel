@@ -150,6 +150,7 @@ func _ready() -> void:
 	add_child(toast)
 	hud.pause_requested.connect(_toggle_pause)
 	hud.shoot_pressed.connect(cue.request_fire)
+	hud.cancel_pressed.connect(cue._cancel)
 	get_viewport().size_changed.connect(_on_resize)
 	_layout()
 	_start_mode(GameState.mode)

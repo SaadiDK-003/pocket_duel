@@ -86,6 +86,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					_ready = true       # Lock the aim; wait for SHOOT.
 					game.hud.set_power(_shot_power)
 					game.hud.set_shoot_visible(true)
+					game.hud.set_cancel_visible(true)
 				else:
 					game.hud.clear_power()   # Release-to-fire mode.
 					game.shoot(a["dir"], a["power"])
@@ -107,6 +108,7 @@ func request_fire() -> void:
 	var p := _shot_power
 	_ready = false
 	game.hud.set_shoot_visible(false)
+	game.hud.set_cancel_visible(false)
 	game.hud.clear_power()
 	queue_redraw()
 	game.shoot(d, p)     # reads spin from the widget
@@ -119,6 +121,7 @@ func _cancel() -> void:
 	if game != null:
 		game.hud.clear_power()
 		game.hud.set_shoot_visible(false)
+		game.hud.set_cancel_visible(false)
 	queue_redraw()
 
 

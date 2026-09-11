@@ -8,6 +8,7 @@ extends CanvasLayer
 
 signal pause_requested
 signal shoot_pressed
+signal cancel_pressed
 
 const ACCENT: Color = Color(0.98, 0.78, 0.28)
 const TEXT_DIM: Color = Color(0.62, 0.67, 0.74)
@@ -44,6 +45,7 @@ var _flash: Label
 var _timer: Label
 var _power_meter: PowerMeter
 var _shoot_btn: Button
+var _cancel_btn: Button
 
 
 func setup() -> void:
@@ -90,12 +92,37 @@ func setup() -> void:
 	_shoot_btn.hide()
 	add_child(_shoot_btn)
 
+	# Cancel button — abort a set-up shot (appears next to SHOOT).
+	_cancel_btn = Button.new()
+	_cancel_btn.text = "✕ CANCEL"
+	_cancel_btn.custom_minimum_size = Vector2(190, 78)
+	_cancel_btn.size = Vector2(190, 78)
+	_cancel_btn.add_theme_font_size_override("font_size", 30)
+	var cs := StyleBoxFlat.new()
+	cs.bg_color = Color(0.16, 0.18, 0.22, 0.95)
+	cs.set_corner_radius_all(16)
+	cs.set_border_width_all(2)
+	cs.border_color = Color(1.0, 0.5, 0.42, 0.55)
+	_cancel_btn.add_theme_stylebox_override("normal", cs)
+	var csh := cs.duplicate(); csh.bg_color = Color(0.24, 0.20, 0.22, 0.98)
+	_cancel_btn.add_theme_stylebox_override("hover", csh)
+	_cancel_btn.add_theme_stylebox_override("pressed", csh)
+	_cancel_btn.add_theme_color_override("font_color", Color(1.0, 0.62, 0.55))
+	_cancel_btn.add_theme_color_override("font_hover_color", Color(1.0, 0.72, 0.65))
+	_cancel_btn.pressed.connect(func(): Audio.play("ui_click"); cancel_pressed.emit())
+	_cancel_btn.hide()
+	add_child(_cancel_btn)
+
 	spin = SpinSelector.new()
 	add_child(spin)
 
 
 func set_shoot_visible(v: bool) -> void:
 	_shoot_btn.visible = v
+
+
+func set_cancel_visible(v: bool) -> void:
+	_cancel_btn.visible = v
 
 
 func _make_power_bar() -> void:
@@ -140,6 +167,7 @@ func layout(vp: Vector2, gutter_left: float = -1.0, gutter_right: float = -1.0) 
 	var sp_x := clampf((gutter_left - spin.size.x) * 0.5, 6.0, maxf(6.0, gutter_left - spin.size.x - 6.0))
 	spin.position = Vector2(sp_x, h - 34.0 - spin.size.y)
 	_shoot_btn.position = Vector2(w - 44 - _shoot_btn.size.x, h - 44 - _shoot_btn.size.y)
+	_cancel_btn.position = Vector2(_shoot_btn.position.x - 16 - _cancel_btn.size.x, h - 44 - _cancel_btn.size.y)
 
 
 func _build_styles() -> void:
