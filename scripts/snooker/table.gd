@@ -35,25 +35,52 @@ var felt_light: Color = Color(0.10, 0.50, 0.27)
 var felt_dark: Color = Color(0.035, 0.30, 0.16)
 var cushion_color: Color = Color(0.05, 0.36, 0.19)
 var cushion_top: Color = Color(0.13, 0.55, 0.30)
-var wood_dark: Color = Color(0.24, 0.14, 0.05)
-var wood_color: Color = Color(0.40, 0.25, 0.11)
-var wood_light: Color = Color(0.56, 0.38, 0.19)
+# Rich mahogany rail (independent of the cloth colour), like 8-ball-pool.
+var wood_dark: Color = Color(0.20, 0.08, 0.06)
+var wood_color: Color = Color(0.44, 0.16, 0.12)
+var wood_light: Color = Color(0.62, 0.27, 0.20)
 var line_color: Color = Color(0.9, 0.9, 0.85, 0.20)
 var pocket_color: Color = Color(0.02, 0.02, 0.02)
 var pocket_rim: Color = Color(0.11, 0.09, 0.07)
+# Chrome pocket fittings + rail sight dots.
+var chrome_base: Color = Color(0.60, 0.64, 0.70)
+var chrome_hi: Color = Color(0.93, 0.96, 1.0)
+var chrome_lo: Color = Color(0.26, 0.29, 0.36)
+var sight_color: Color = Color(0.92, 0.90, 0.82)
+
+var _felt_grad: GradientTexture2D            # Radial spotlight over the bed.
 
 
 func setup(rect: Rect2) -> void:
 	play_rect = rect
-	# Apply the selected table cloth (felt + cushions derive from one colour).
+	# Apply the selected table cloth. Cushions are LIGHTER than the bed (8-ball
+	# style); the bed gets a bright centre fading to dark edges.
 	felt_color = GameState.cloth_color()
-	felt_light = felt_color.lightened(0.16)
-	felt_dark = felt_color.darkened(0.34)
-	cushion_color = felt_color.darkened(0.20)
-	cushion_top = felt_color.lightened(0.24)
+	felt_light = felt_color.lightened(0.30)
+	felt_dark = felt_color.darkened(0.32)
+	cushion_color = felt_color.lightened(0.08)
+	cushion_top = felt_color.lightened(0.32)
+	_build_felt_gradient()
 	_compute_geometry()
 	_build_pockets()
 	queue_redraw()
+
+
+## A radial gradient texture (bright centre -> dark rim) drawn over the bed for
+## the soft "spotlight" look. Stretched to the table, so it reads as an ellipse.
+func _build_felt_gradient() -> void:
+	var g := Gradient.new()
+	g.set_offset(0, 0.0);  g.set_color(0, felt_light)
+	g.set_offset(1, 1.0);  g.set_color(1, felt_dark)
+	g.add_point(0.55, felt_color)
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.width = 256
+	gt.height = 256
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.5)
+	gt.fill_to = Vector2(1.0, 0.5)
+	_felt_grad = gt
 
 
 func _compute_geometry() -> void:
@@ -68,8 +95,8 @@ func _compute_geometry() -> void:
 	pocket_radius = w * 0.055
 	corner_hole = pocket_radius * 0.82
 	mid_hole = pocket_radius * 0.72
-	corner_open = pocket_radius * 1.05
-	mid_open = pocket_radius * 0.86
+	corner_open = pocket_radius * 0.92
+	mid_open = pocket_radius * 0.74
 	spots = {
 		"green": Vector2(baulk_x, cy - d_radius),        # Left corner of the D.
 		"brown": Vector2(baulk_x, cy),                   # Middle of the baulk line.
@@ -83,14 +110,36 @@ func _compute_geometry() -> void:
 func _build_pockets() -> void:
 	var r := play_rect
 	var mid_x := r.position.x + r.size.x * 0.5
-	pockets = [
-		{"pos": r.position, "radius": pocket_radius},                         # top-left
-		{"pos": Vector2(mid_x, r.position.y), "radius": pocket_radius},        # top-middle
-		{"pos": Vector2(r.end.x, r.position.y), "radius": pocket_radius},      # top-right
-		{"pos": Vector2(r.position.x, r.end.y), "radius": pocket_radius},      # bottom-left
-		{"pos": Vector2(mid_x, r.end.y), "radius": pocket_radius},             # bottom-middle
-		{"pos": r.end, "radius": pocket_radius},                              # bottom-right
+	var c := r.get_center()
+	var raw: Array[Vector2] = [
+		r.position, Vector2(mid_x, r.position.y), Vector2(r.end.x, r.position.y),
+		Vector2(r.position.x, r.end.y), Vector2(mid_x, r.end.y), r.end,
 	]
+	pockets = []
+	for pos in raw:
+		# `pos` is the bed corner. The VISIBLE hole (and, for a middle pocket, the
+		# CAPTURE zone) is seated OUTWARD into the rail. A middle pocket only takes
+		# a ball that actually dives into it — a ball rolling along the cushion
+		# stays a full ball-radius short of the pushed-out capture centre, so it
+		# rolls past instead of being sucked in. Corner pockets keep capturing at
+		# the bed corner (a ball rolling into a corner should pot).
+		# Middle pockets sit at the horizontal centre of the long (top/bottom)
+		# rails — detect them by X, not Y (they share Y with the corners).
+		var is_mid := absf(pos.x - c.x) < 1.0
+		if is_mid:
+			var outv := Vector2(0.0, signf(pos.y - c.y))
+			var seat := pos + outv * (pocket_radius * 0.85)   # scales with pocket size
+			pockets.append({
+				"pos": pos, "radius": pocket_radius, "mid": true,
+				"visual": seat, "capture": seat, "cap_r": pocket_radius * 0.90,
+			})
+		else:
+			var outv := Vector2(signf(pos.x - c.x), signf(pos.y - c.y)).normalized()
+			pockets.append({
+				"pos": pos, "radius": pocket_radius, "mid": false,
+				"visual": pos + outv * (CUSHION_W * 0.80),
+				"capture": pos, "cap_r": pocket_radius,
+			})
 
 
 func _draw() -> void:
@@ -106,10 +155,14 @@ func _draw() -> void:
 	_round_rect(outer.grow(-4.0), 36.0, wood_light)     # bevel...
 	_round_rect(outer.grow(-9.0), 31.0, wood_color)     # ...leaving a thin highlight.
 
-	# Felt bed with a soft central light pool for depth.
-	_round_rect(felt_rect, 14.0, felt_color)
-	draw_circle(play_rect.get_center(), minf(play_rect.size.x, play_rect.size.y) * 0.62, Color(felt_light.r, felt_light.g, felt_light.b, 0.10))
-	_round_rect_outline(felt_rect, 14.0, felt_dark, 3.0)
+	# Rail sight dots on the wood (between the cushions and the outer edge).
+	_draw_sight_dots(felt_rect)
+
+	# Felt bed: dark base, then the radial "spotlight" gradient over it.
+	_round_rect(felt_rect, 14.0, felt_dark)
+	if _felt_grad != null:
+		draw_texture_rect(_felt_grad, felt_rect, false)
+	_round_rect_outline(felt_rect, 14.0, felt_dark.darkened(0.2), 3.0)
 
 	# Baulk line + "D".
 	draw_line(Vector2(baulk_x, play_rect.position.y), Vector2(baulk_x, play_rect.end.y), line_color, 2.0)
@@ -141,22 +194,59 @@ func _draw_cushions() -> void:
 func _cushion(a: Vector2, b: Vector2, out: Vector2) -> void:
 	var along := (b - a).normalized()
 	var back := out * CUSHION_W
+	var bevel := out * (CUSHION_W * 0.5)
 	var nose_a := a + along * JAW
 	var nose_b := b - along * JAW
-	# Body trapezoid: full-width at the back, pulled in at the nose (the jaws).
-	draw_colored_polygon(PackedVector2Array([a + back, b + back, nose_b, nose_a]), cushion_color)
-	# Bright nose highlight along the playing edge.
-	draw_line(nose_a, nose_b, cushion_top, 3.0)
+	# Sloped face (nose -> mid) in the base colour...
+	draw_colored_polygon(PackedVector2Array([a + bevel, b + bevel, nose_b, nose_a]), cushion_color.darkened(0.10))
+	# ...and the flat top surface (mid -> back) in the lighter bevel colour.
+	draw_colored_polygon(PackedVector2Array([a + back, b + back, b + bevel, a + bevel]), cushion_top)
+	# Bright nose edge along the playing line, plus a soft shadow it casts on the bed.
+	draw_line(nose_a, nose_b, cushion_top.lightened(0.12), 2.5, true)
+	draw_line(nose_a - out * 3.0, nose_b - out * 3.0, Color(0, 0, 0, 0.14), 5.0)
 
 
 func _draw_pockets() -> void:
+	# A single clean dark opening per pocket (no fat metal ring), seated into the
+	# rail — matching the reference table.
 	for p in pockets:
-		var pos: Vector2 = p["pos"]
-		var is_mid: bool = absf(pos.y - play_rect.position.y) > 1.0 and absf(pos.y - play_rect.end.y) > 1.0
-		var hole: float = mid_hole if is_mid else corner_hole
-		draw_circle(pos, hole + 5.0, pocket_rim)          # leather rim
-		draw_circle(pos, hole, pocket_color)              # hole
-		draw_circle(pos - Vector2(hole * 0.28, hole * 0.28), hole * 0.5, Color(0.05, 0.05, 0.05))  # subtle depth
+		var hole: float = (mid_hole if p["mid"] else corner_hole) * 1.18
+		_draw_pocket(p["visual"], hole)
+
+
+## One clean dark pocket opening with a soft rim and a thin metal edge.
+func _draw_pocket(pos: Vector2, hole: float) -> void:
+	draw_circle(pos, hole * 1.16, Color(0, 0, 0, 0.35))                 # soft shadow into the felt/wood
+	draw_circle(pos, hole * 1.05, Color(0.10, 0.11, 0.13))             # dark rim
+	draw_arc(pos, hole * 1.05, 0.0, TAU, 44, Color(0.60, 0.63, 0.68, 0.55), 2.0, true)  # thin silver edge
+	draw_circle(pos, hole, Color(0.015, 0.015, 0.02))                 # the hole (near-black)
+	draw_circle(pos - Vector2(hole * 0.20, hole * 0.20), hole * 0.55, Color(0.05, 0.05, 0.06))  # faint depth
+
+
+## Sight dots (diamonds) evenly spaced along the wooden rails.
+func _draw_sight_dots(felt_rect: Rect2) -> void:
+	var half := RAIL_W * 0.5
+	var top_y := felt_rect.position.y - half
+	var bot_y := felt_rect.end.y + half
+	var left_x := felt_rect.position.x - half
+	var right_x := felt_rect.end.x + half
+	var r := maxf(pocket_radius * 0.10, 3.0)
+	var px := play_rect.position.x
+	var py := play_rect.position.y
+	var pw := play_rect.size.x
+	var ph := play_rect.size.y
+	for f in [0.125, 0.25, 0.375, 0.625, 0.75, 0.875]:      # long rails
+		_dot(Vector2(px + f * pw, top_y), r)
+		_dot(Vector2(px + f * pw, bot_y), r)
+	for f in [0.25, 0.5, 0.75]:                             # short rails
+		_dot(Vector2(left_x, py + f * ph), r)
+		_dot(Vector2(right_x, py + f * ph), r)
+
+
+func _dot(p: Vector2, r: float) -> void:
+	draw_circle(p, r * 1.25, wood_dark)          # recessed shadow
+	draw_circle(p, r, sight_color)
+	draw_circle(p - Vector2(r * 0.3, r * 0.3), r * 0.4, sight_color.lightened(0.3))  # tiny sheen
 
 
 # ------------------------------------------------------------------ Draw helpers

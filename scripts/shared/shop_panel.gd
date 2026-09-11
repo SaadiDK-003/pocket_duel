@@ -59,11 +59,16 @@ func _build() -> void:
 
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 40)
+		margin.add_theme_constant_override("margin_" + side, 48)
 	pc.add_child(margin)
 
+	# Use most of the screen width instead of a tiny centred box.
+	var vp := get_viewport().get_visible_rect().size
+	var content_w := clampf(vp.x * 0.86, 640.0, 1500.0)
+
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 12)
+	vb.add_theme_constant_override("separation", 16)
+	vb.custom_minimum_size = Vector2(content_w, 0)
 	margin.add_child(vb)
 
 	# Header: title + coin balance.
@@ -71,12 +76,12 @@ func _build() -> void:
 	var title := Label.new()
 	title.text = "SHOP"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 44)
+	title.add_theme_font_size_override("font_size", 52)
 	title.add_theme_color_override("font_color", TEXT)
 	header.add_child(title)
 	var coins := Label.new()
 	coins.text = "🪙 %d" % GameState.coins
-	coins.add_theme_font_size_override("font_size", 34)
+	coins.add_theme_font_size_override("font_size", 40)
 	coins.add_theme_color_override("font_color", ACCENT)
 	header.add_child(coins)
 	vb.add_child(header)
@@ -109,12 +114,12 @@ func _build() -> void:
 func _section(parent: Node, heading: String, order: Array, catalogue: Dictionary, kind: String, selected: String) -> void:
 	var h := Label.new()
 	h.text = heading
-	h.add_theme_font_size_override("font_size", 24)
+	h.add_theme_font_size_override("font_size", 28)
 	h.add_theme_color_override("font_color", TEXT_DIM)
 	parent.add_child(h)
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
+	row.add_theme_constant_override("separation", 16)
 	parent.add_child(row)
 	for id in order:
 		row.add_child(_swatch(kind, id, catalogue[id], id == selected))
@@ -126,7 +131,7 @@ func _swatch(kind: String, id: String, item: Dictionary, is_selected: bool) -> C
 	box.add_theme_constant_override("separation", 4)
 
 	var b := Button.new()
-	b.custom_minimum_size = Vector2(96, 82)
+	b.custom_minimum_size = Vector2(132, 112)
 	var sb := StyleBoxFlat.new()
 	# Ball sets show a ball preview on a dark bed; cloths/cues fill with the colour.
 	sb.bg_color = Color(0.06, 0.08, 0.10) if kind == "ball" else item["color"]
@@ -148,7 +153,7 @@ func _swatch(kind: String, id: String, item: Dictionary, is_selected: bool) -> C
 
 	var lbl := Label.new()
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 18)
+	lbl.add_theme_font_size_override("font_size", 22)
 	if is_selected:
 		lbl.text = "✓ Using"
 		lbl.add_theme_color_override("font_color", ACCENT)

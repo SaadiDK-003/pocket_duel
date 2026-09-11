@@ -26,20 +26,19 @@ func _ready() -> void:
 
 
 func _build() -> void:
-	# Background gradient.
-	var grad := Gradient.new()
-	grad.set_color(0, Color(0.09, 0.22, 0.16))
-	grad.set_color(1, Color(0.03, 0.09, 0.07))
-	var gt := GradientTexture2D.new()
-	gt.gradient = grad
-	gt.fill_from = Vector2(0, 0)
-	gt.fill_to = Vector2(0, 1)
+	# Background: the snooker photo, darkened + blurred, cover-scaled to fill.
 	var bg := TextureRect.new()
-	bg.texture = gt
-	bg.stretch_mode = TextureRect.STRETCH_SCALE
+	bg.texture = load("res://assets/ui/menu_bg.jpg")
+	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
+	# Dark scrim so the title and buttons stay legible over the photo.
+	var scrim := ColorRect.new()
+	scrim.color = Color(0.03, 0.06, 0.10, 0.55)
+	scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(scrim)
 
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -48,7 +47,9 @@ func _build() -> void:
 	var vb := VBoxContainer.new()
 	vb.alignment = BoxContainer.ALIGNMENT_CENTER
 	vb.add_theme_constant_override("separation", 16)
-	vb.custom_minimum_size = Vector2(600, 0)
+	# Wider on a landscape phone so the menu fills more of the screen.
+	var vpw := get_viewport().get_visible_rect().size.x
+	vb.custom_minimum_size = Vector2(clampf(vpw * 0.5, 600.0, 900.0), 0)
 	center.add_child(vb)
 
 	_title(vb, "POCKET DUEL", 96, TEXT)
@@ -100,6 +101,11 @@ func _title(parent: Node, text: String, size: int, color: Color) -> void:
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
+	# Drop shadow so titles read clearly over the photo background.
+	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	l.add_theme_constant_override("shadow_offset_x", 3)
+	l.add_theme_constant_override("shadow_offset_y", 4)
+	l.add_theme_constant_override("shadow_outline_size", 2)
 	parent.add_child(l)
 
 
@@ -195,8 +201,10 @@ func _open_modal() -> VBoxContainer:
 	pc.add_child(margin)
 
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 16)
-	vb.custom_minimum_size = Vector2(560, 0)
+	vb.add_theme_constant_override("separation", 18)
+	# Wider on a landscape screen instead of a tiny centred box.
+	var vp := get_viewport().get_visible_rect().size
+	vb.custom_minimum_size = Vector2(clampf(vp.x * 0.6, 560.0, 1000.0), 0)
 	margin.add_child(vb)
 	return vb
 
@@ -209,9 +217,10 @@ func _close_modal() -> void:
 func _field(parent: Node, placeholder: String) -> LineEdit:
 	var le := LineEdit.new()
 	le.placeholder_text = placeholder
-	le.custom_minimum_size = Vector2(560, 66)
+	le.custom_minimum_size = Vector2(0, 74)
+	le.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	le.max_length = 16
-	le.add_theme_font_size_override("font_size", 30)
+	le.add_theme_font_size_override("font_size", 32)
 	var st := StyleBoxFlat.new()
 	st.bg_color = FIELD
 	st.set_corner_radius_all(12)

@@ -28,10 +28,16 @@ var style: String = "classic"    # Ball-set finish (see BallPainter / Cosmetics)
 var starting_position: Vector2 = Vector2.ZERO
 
 # --- Pot animation (sink into the pocket) ---
-const SINK_TIME: float = 0.30
+# The drop duration is derived from the ball's SPEED (fast ball -> quick drop,
+# slow ball -> gentle drop) so it never visibly decelerates to fill a fixed time.
+const SINK_MIN: float = 0.10
+const SINK_MAX: float = 0.28
 var _sinking: bool = false
 var _sink_t: float = 0.0
-var _sink_offset: Vector2 = Vector2.ZERO   # Local vector toward the pocket centre.
+var _sink_dur: float = 0.20                # This pot's duration (from speed).
+var _sink_target: Vector2 = Vector2.ZERO   # Local vector to the pocket centre.
+var _sink_dir: Vector2 = Vector2.ZERO      # Ball's travel direction at capture.
+var _sink_speed: float = 0.0               # Ball's speed at capture.
 
 
 func setup(p_type: int, p_value: int, p_color: Color, p_pos: Vector2, p_radius: float) -> void:
@@ -54,12 +60,18 @@ func is_moving() -> bool:
 
 
 ## Pot the ball: remove it from play (is_potted) and play the sink animation.
+## The drop keeps the ball's momentum and curves into the hole (no sideways yank).
 func pot_into(pocket_pos: Vector2) -> void:
 	is_potted = true
+	_sink_target = pocket_pos - position
+	_sink_speed = velocity.length()
+	_sink_dir = velocity / _sink_speed if _sink_speed > 1.0 else _sink_target.normalized()
+	# Duration from speed: the ball keeps its pace into the hole (no slowdown).
+	var dist := maxf(_sink_target.length(), 1.0)
+	_sink_dur = clampf(dist / maxf(_sink_speed, 1.0), SINK_MIN, SINK_MAX)
 	velocity = Vector2.ZERO
 	_sinking = true
 	_sink_t = 0.0
-	_sink_offset = pocket_pos - position
 	set_process(true)
 	queue_redraw()
 
@@ -67,8 +79,8 @@ func pot_into(pocket_pos: Vector2) -> void:
 func _process(delta: float) -> void:
 	if not _sinking:
 		return
-	_sink_t += delta / SINK_TIME
-	if _sink_t >= 1.0:
+	_sink_t += delta
+	if _sink_t >= _sink_dur:
 		_end_sink()
 		visible = false
 	queue_redraw()
@@ -102,18 +114,19 @@ func _draw() -> void:
 	if is_potted and not _sinking:
 		return
 	if _sinking:
-		var t := clampf(_sink_t, 0.0, 1.0)
-		# 1) Continue into the pocket smoothly — ease OUT (fast at capture, easing
-		#    into the hole) so there's no stall between rolling and dropping.
-		var mp := minf(t / 0.5, 1.0)
-		var move := 1.0 - (1.0 - mp) * (1.0 - mp)
-		var c := _sink_offset * move
-		# 2) Fall into the hole: shrink faster as it drops (t^2).
-		var s := maxf(1.0 - t * t, 0.02)
-		# 3) Darken into the pocket's shadow, and only fade right at the end.
-		var dark := t * 0.75
-		var a := 1.0 if t < 0.82 else (1.0 - (t - 0.82) / 0.18)
-		# Highlight dims as it turns away from the light while dropping.
+		var t := clampf(_sink_t / _sink_dur, 0.0, 1.0)
+		# 1) Path: a quadratic Bézier that leaves in the ball's TRAVEL direction and
+		#    curves into the pocket, so momentum is preserved (no sideways snap).
+		var dist := _sink_target.length()
+		var ctrl_len := clampf(_sink_speed * _sink_dur * 0.5, dist * 0.3, dist * 0.9)
+		var p1 := _sink_dir * ctrl_len                       # control point offset
+		var c := 2.0 * (1.0 - t) * t * p1 + t * t * _sink_target   # P0 = 0
+		# 2) Roll to the hole first, THEN drop in: hold size until ~30%, then shrink.
+		var sink := clampf((t - 0.30) / 0.70, 0.0, 1.0)
+		var s := maxf(1.0 - sink * sink, 0.05)
+		# 3) Darken into the pocket's shadow as it drops, fading right at the end.
+		var dark := sink * 0.8
+		var a := 1.0 if sink < 0.75 else (1.0 - (sink - 0.75) / 0.25)
 		BallPainter.paint(self, c, radius * s, a, color.lerp(Color(0.02, 0.02, 0.02), dark), 1.0 - dark, style)
 	else:
 		BallPainter.paint(self, Vector2.ZERO, radius, 1.0, color, 1.0, style)
