@@ -35,10 +35,10 @@ var felt_light: Color = Color(0.10, 0.50, 0.27)
 var felt_dark: Color = Color(0.035, 0.30, 0.16)
 var cushion_color: Color = Color(0.05, 0.36, 0.19)
 var cushion_top: Color = Color(0.13, 0.55, 0.30)
-# Rich mahogany rail (independent of the cloth colour), like 8-ball-pool.
-var wood_dark: Color = Color(0.20, 0.08, 0.06)
-var wood_color: Color = Color(0.44, 0.16, 0.12)
-var wood_light: Color = Color(0.62, 0.27, 0.20)
+# Warm brown wood rail (independent of the cloth colour), like the reference.
+var wood_dark: Color = Color(0.30, 0.19, 0.10)
+var wood_color: Color = Color(0.50, 0.34, 0.19)
+var wood_light: Color = Color(0.64, 0.47, 0.29)
 var line_color: Color = Color(0.9, 0.9, 0.85, 0.20)
 var pocket_color: Color = Color(0.02, 0.02, 0.02)
 var pocket_rim: Color = Color(0.11, 0.09, 0.07)
@@ -56,8 +56,8 @@ func setup(rect: Rect2) -> void:
 	# Apply the selected table cloth. Cushions are LIGHTER than the bed (8-ball
 	# style); the bed gets a bright centre fading to dark edges.
 	felt_color = GameState.cloth_color()
-	felt_light = felt_color.lightened(0.30)
-	felt_dark = felt_color.darkened(0.32)
+	felt_light = felt_color.lightened(0.12)   # gentle centre (even lighting)
+	felt_dark = felt_color.darkened(0.22)     # soft edge vignette
 	# Brighten in HSV (keep the hue & saturation) so the cushion stays a rich
 	# version of the cloth colour instead of washing out to a pale tint.
 	cushion_color = _brighten(felt_color, 1.20, 1.0)    # mid-tone face
@@ -246,40 +246,47 @@ func _draw_pockets() -> void:
 		_draw_pocket(p["visual"], hole)
 
 
-## One clean dark pocket opening with a soft rim and a thin metal edge.
+## A pocket: a brushed-silver metal plate (soft vertical bevel, like the
+## reference table) with a clean black hole punched through it.
 func _draw_pocket(pos: Vector2, hole: float) -> void:
-	draw_circle(pos, hole * 1.16, Color(0, 0, 0, 0.35))                 # soft shadow into the felt/wood
-	draw_circle(pos, hole * 1.05, Color(0.10, 0.11, 0.13))             # dark rim
-	draw_arc(pos, hole * 1.05, 0.0, TAU, 44, Color(0.60, 0.63, 0.68, 0.55), 2.0, true)  # thin silver edge
-	draw_circle(pos, hole, Color(0.015, 0.015, 0.02))                 # the hole (near-black)
-	draw_circle(pos - Vector2(hole * 0.20, hole * 0.20), hole * 0.55, Color(0.05, 0.05, 0.06))  # faint depth
+	var plate := hole * 1.42
+	draw_circle(pos + Vector2(0, plate * 0.08), plate * 1.05, Color(0, 0, 0, 0.30))   # drop shadow
+	draw_circle(pos, plate, Color(0.66, 0.68, 0.72))                                  # metal base
+	draw_circle(pos - Vector2(0, plate * 0.16), plate * 0.92, Color(0.82, 0.84, 0.88))  # upper sheen
+	draw_circle(pos + Vector2(0, plate * 0.30), plate * 0.66, Color(0.50, 0.52, 0.58))  # lower shade
+	draw_arc(pos, plate, 0.0, TAU, 48, Color(0.30, 0.32, 0.38), 2.0, true)            # rim
+	draw_circle(pos, hole, Color(0.01, 0.01, 0.015))                                 # the hole
+	draw_arc(pos, hole, 0.0, TAU, 40, Color(0, 0, 0, 0.8), 3.0, true)                 # inner rim
 
 
-## Faint lengthwise wood grain on the four rails (streaks running along each rail).
+## Wood grain: fine streaks running ACROSS each rail (like the reference), dense
+## and slightly irregular so the rail reads as real timber.
 func _draw_wood_grain(felt_rect: Rect2, outer: Rect2) -> void:
-	var corner := 44.0
+	var corner := 46.0
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20240611
-	# Top & bottom rails: horizontal streaks.
-	for band in [[outer.position.y + 6.0, felt_rect.position.y], [felt_rect.end.y, outer.end.y - 6.0]]:
-		var x0 := outer.position.x + corner
-		var x1 := outer.end.x - corner
-		for i in range(11):
-			var yy: float = lerpf(band[0], band[1], (i + 0.5) / 11.0)
-			var dark := i % 2 == 0
+	# Top & bottom rails: vertical streaks stepped along the length.
+	for band in [[outer.position.y + 6.0, felt_rect.position.y - 1.0], [felt_rect.end.y + 1.0, outer.end.y - 6.0]]:
+		var x := outer.position.x + corner
+		var x_end := outer.end.x - corner
+		while x < x_end:
+			var dark := rng.randf() < 0.5
 			var base := wood_dark if dark else wood_light
-			var col := Color(base.r, base.g, base.b, rng.randf_range(0.08, 0.20))
-			draw_line(Vector2(x0, yy), Vector2(x1, yy), col, rng.randf_range(1.0, 2.0))
-	# Left & right rails: vertical streaks.
-	for band in [[outer.position.x + 6.0, felt_rect.position.x], [felt_rect.end.x, outer.end.x - 6.0]]:
-		var y0 := outer.position.y + corner
-		var y1 := outer.end.y - corner
-		for i in range(11):
-			var xx: float = lerpf(band[0], band[1], (i + 0.5) / 11.0)
-			var dark := i % 2 == 0
+			var col := Color(base.r, base.g, base.b, rng.randf_range(0.10, 0.28))
+			var jit := rng.randf_range(-2.0, 2.0)
+			draw_line(Vector2(x, band[0]), Vector2(x + jit, band[1]), col, rng.randf_range(1.0, 2.4))
+			x += rng.randf_range(5.0, 11.0)
+	# Left & right rails: horizontal streaks stepped along the height.
+	for band in [[outer.position.x + 6.0, felt_rect.position.x - 1.0], [felt_rect.end.x + 1.0, outer.end.x - 6.0]]:
+		var y := outer.position.y + corner
+		var y_end := outer.end.y - corner
+		while y < y_end:
+			var dark := rng.randf() < 0.5
 			var base := wood_dark if dark else wood_light
-			var col := Color(base.r, base.g, base.b, rng.randf_range(0.08, 0.20))
-			draw_line(Vector2(xx, y0), Vector2(xx, y1), col, rng.randf_range(1.0, 2.0))
+			var col := Color(base.r, base.g, base.b, rng.randf_range(0.10, 0.28))
+			var jit := rng.randf_range(-2.0, 2.0)
+			draw_line(Vector2(band[0], y), Vector2(band[1], y + jit), col, rng.randf_range(1.0, 2.4))
+			y += rng.randf_range(5.0, 11.0)
 
 
 ## Sight dots (diamonds) evenly spaced along the wooden rails.
@@ -289,7 +296,7 @@ func _draw_sight_dots(felt_rect: Rect2) -> void:
 	var bot_y := felt_rect.end.y + half
 	var left_x := felt_rect.position.x - half
 	var right_x := felt_rect.end.x + half
-	var r := maxf(pocket_radius * 0.10, 3.0)
+	var r := maxf(pocket_radius * 0.13, 4.0)
 	var px := play_rect.position.x
 	var py := play_rect.position.y
 	var pw := play_rect.size.x
@@ -302,10 +309,13 @@ func _draw_sight_dots(felt_rect: Rect2) -> void:
 		_dot(Vector2(right_x, py + f * ph), r)
 
 
+## A metallic silver stud (like the reference's rail bolts).
 func _dot(p: Vector2, r: float) -> void:
-	draw_circle(p, r * 1.25, wood_dark)          # recessed shadow
-	draw_circle(p, r, sight_color)
-	draw_circle(p - Vector2(r * 0.3, r * 0.3), r * 0.4, sight_color.lightened(0.3))  # tiny sheen
+	draw_circle(p + Vector2(0, r * 0.22), r * 1.18, Color(0, 0, 0, 0.35))          # shadow
+	draw_circle(p, r, Color(0.60, 0.62, 0.66))                                     # metal base
+	draw_circle(p - Vector2(0, r * 0.18), r * 0.8, Color(0.80, 0.82, 0.86))        # upper sheen
+	draw_circle(p - Vector2(r * 0.28, r * 0.30), r * 0.32, Color(0.93, 0.95, 0.98))  # highlight
+	draw_arc(p, r, 0.0, TAU, 20, Color(0.34, 0.36, 0.42), 1.0, true)               # rim
 
 
 # ------------------------------------------------------------------ Draw helpers
