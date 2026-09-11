@@ -14,7 +14,7 @@ const TEXT_DIM: Color = Color(0.62, 0.67, 0.74)
 const TEXT_BRIGHT: Color = Color(0.96, 0.97, 0.99)
 const CARD_W: float = 320.0
 const CARD_H: float = 84.0
-const PILL_W: float = 360.0
+const PILL_W: float = 440.0
 const PILL_H: float = 62.0
 const PWRV_W: float = 46.0        # Vertical power meter (8-ball-pool style).
 const PWRV_H: float = 380.0
@@ -287,9 +287,14 @@ func refresh(turn: TurnManager, on_ball: String = "") -> void:
 		_pill.hide()
 		return
 	_pill.show()
-	_on_ball.base = ON_COLORS.get(on_ball, Color(1, 1, 1))
+	if on_ball == "COLOUR":
+		_on_ball.multi = true            # "any colour" — pot any colour after a red
+		_on_text.text = "ANY COLOUR"
+	else:
+		_on_ball.multi = false
+		_on_ball.base = ON_COLORS.get(on_ball, Color(1, 1, 1))
+		_on_text.text = on_ball
 	_on_ball.queue_redraw()
-	_on_text.text = on_ball
 	if turn.break_score > 0:
 		_sep.show()
 		_break.show()
