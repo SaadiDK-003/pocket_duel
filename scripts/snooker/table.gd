@@ -117,23 +117,29 @@ func _build_pockets() -> void:
 	]
 	pockets = []
 	for pos in raw:
-		# `pos` is the physics capture point (ball centre bounds corner). The
-		# VISIBLE hole is seated a little OUTWARD into the rail (like a real
-		# pocket dipping into the cushion) — and the ball sinks toward this same
-		# `visual` point, so the drop drops into the hole you see.
-		var is_mid := absf(pos.y - r.position.y) > 1.0 and absf(pos.y - r.end.y) > 1.0
-		var outv: Vector2
-		var push: float
+		# `pos` is the bed corner. The VISIBLE hole (and, for a middle pocket, the
+		# CAPTURE zone) is seated OUTWARD into the rail. A middle pocket only takes
+		# a ball that actually dives into it — a ball rolling along the cushion
+		# stays a full ball-radius short of the pushed-out capture centre, so it
+		# rolls past instead of being sucked in. Corner pockets keep capturing at
+		# the bed corner (a ball rolling into a corner should pot).
+		# Middle pockets sit at the horizontal centre of the long (top/bottom)
+		# rails — detect them by X, not Y (they share Y with the corners).
+		var is_mid := absf(pos.x - c.x) < 1.0
 		if is_mid:
-			outv = Vector2(0.0, signf(pos.y - c.y))
-			push = CUSHION_W * 0.75
+			var outv := Vector2(0.0, signf(pos.y - c.y))
+			var seat := pos + outv * (pocket_radius * 0.85)   # scales with pocket size
+			pockets.append({
+				"pos": pos, "radius": pocket_radius, "mid": true,
+				"visual": seat, "capture": seat, "cap_r": pocket_radius * 0.90,
+			})
 		else:
-			outv = Vector2(signf(pos.x - c.x), signf(pos.y - c.y)).normalized()
-			push = CUSHION_W * 0.80
-		pockets.append({
-			"pos": pos, "radius": pocket_radius,
-			"visual": pos + outv * push, "mid": is_mid,
-		})
+			var outv := Vector2(signf(pos.x - c.x), signf(pos.y - c.y)).normalized()
+			pockets.append({
+				"pos": pos, "radius": pocket_radius, "mid": false,
+				"visual": pos + outv * (CUSHION_W * 0.80),
+				"capture": pos, "cap_r": pocket_radius,
+			})
 
 
 func _draw() -> void:

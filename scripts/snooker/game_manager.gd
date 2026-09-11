@@ -848,7 +848,7 @@ func _resolve_pockets() -> void:
 		if b.is_potted:
 			continue
 		for p in table.pockets:
-			if b.position.distance_to(p["pos"]) <= p["radius"]:
+			if b.position.distance_to(p.get("capture", p["pos"])) <= p.get("cap_r", p["radius"]):
 				# Sink toward the VISIBLE hole centre so the drop lands in the hole.
 				_pot_ball(b, p.get("visual", p["pos"]))
 				break
@@ -937,6 +937,10 @@ func _resolve_cushions() -> void:
 		var top := r.position.y + b.radius
 		var bottom := r.end.y - b.radius
 		var is_cue := b == cue_ball
+		# Open a gap in the top/bottom cushion at the middle pocket so a ball
+		# aimed into it can cross the rail line and drop (a rail-hugging ball
+		# outside this narrow mouth still bounces normally).
+		var in_mid_mouth := absf(b.position.x - r.get_center().x) < table.pocket_radius * 0.85
 		if b.position.x < left:
 			b.position.x = left
 			_frame_cushion_impact = maxf(_frame_cushion_impact, absf(b.velocity.x))
@@ -951,14 +955,14 @@ func _resolve_cushions() -> void:
 				b.velocity.y += b.spin_side * SIDE_FACTOR * absf(b.velocity.x)
 				b.spin_side *= 0.6
 			b.velocity.x = -b.velocity.x * RESTITUTION_CUSHION
-		if b.position.y < top:
+		if b.position.y < top and not in_mid_mouth:
 			b.position.y = top
 			_frame_cushion_impact = maxf(_frame_cushion_impact, absf(b.velocity.y))
 			if is_cue:
 				b.velocity.x += b.spin_side * SIDE_FACTOR * absf(b.velocity.y)
 				b.spin_side *= 0.6
 			b.velocity.y = -b.velocity.y * RESTITUTION_CUSHION
-		elif b.position.y > bottom:
+		elif b.position.y > bottom and not in_mid_mouth:
 			b.position.y = bottom
 			_frame_cushion_impact = maxf(_frame_cushion_impact, absf(b.velocity.y))
 			if is_cue:
