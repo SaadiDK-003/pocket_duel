@@ -177,7 +177,9 @@ func _layout() -> void:
 	# screen (bigger than the old fixed 18px on wide phones). Bounded by table
 	# WIDTH too, so the 15-red triangle always fits between the pink and black.
 	ball_radius = clampf(minf(table.play_rect.size.y * 0.030, table.play_rect.size.x * 0.0138), 15.0, 26.0)
-	hud.layout(vp)
+	# Pass the table's outer wood edges so side HUD widgets stay in the gutters.
+	var margin := Table.CUSHION_W + Table.RAIL_W
+	hud.layout(vp, table.play_rect.position.x - margin, table.play_rect.end.x + margin)
 
 
 func _compute_play_rect(vp: Vector2) -> Rect2:

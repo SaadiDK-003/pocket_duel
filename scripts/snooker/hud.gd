@@ -42,9 +42,7 @@ var _mode: Label
 var _hint: Label
 var _flash: Label
 var _timer: Label
-var _power_track: Panel
-var _power_clip: Control
-var _power_grad: TextureRect
+var _power_meter: PowerMeter
 var _shoot_btn: Button
 
 
@@ -100,69 +98,32 @@ func set_shoot_visible(v: bool) -> void:
 	_shoot_btn.visible = v
 
 
-## A vertical power meter (8-ball-pool style): a dark track with a yellow→red
-## gradient that fills UP from the bottom as power increases.
 func _make_power_bar() -> void:
-	_power_track = Panel.new()
-	_power_track.size = Vector2(PWRV_W, PWRV_H)
-	var st := StyleBoxFlat.new()
-	st.bg_color = Color(0.05, 0.06, 0.08, 0.88)
-	st.set_corner_radius_all(int(PWRV_W * 0.5))
-	st.set_border_width_all(2)
-	st.border_color = Color(1, 1, 1, 0.12)
-	_power_track.add_theme_stylebox_override("panel", st)
-	add_child(_power_track)
-
-	var iw := PWRV_W - PWR_INSET * 2.0
-	var ih := PWRV_H - PWR_INSET * 2.0
-	_power_clip = Control.new()
-	_power_clip.clip_contents = true
-	_power_clip.position = Vector2(PWR_INSET, PWR_INSET + ih)   # zero-height at the bottom
-	_power_clip.size = Vector2(iw, 0)
-	_power_track.add_child(_power_clip)
-
-	_power_grad = TextureRect.new()
-	_power_grad.texture = _build_power_gradient()
-	_power_grad.size = Vector2(iw, ih)
-	_power_grad.stretch_mode = TextureRect.STRETCH_SCALE
-	_power_clip.add_child(_power_grad)
-
-	_power_track.hide()
-
-
-## Vertical gradient for the meter: red (top / full power) -> orange -> yellow.
-func _build_power_gradient() -> GradientTexture2D:
-	var g := Gradient.new()
-	g.set_offset(0, 0.0); g.set_color(0, Color(0.95, 0.20, 0.12))   # top = red
-	g.set_offset(1, 1.0); g.set_color(1, Color(1.0, 0.85, 0.16))    # bottom = yellow
-	g.add_point(0.5, Color(0.98, 0.55, 0.13))                       # orange
-	var gt := GradientTexture2D.new()
-	gt.gradient = g
-	gt.width = 16
-	gt.height = 256
-	gt.fill_from = Vector2(0, 0)
-	gt.fill_to = Vector2(0, 1)
-	return gt
+	_power_meter = PowerMeter.new()
+	_power_meter.size = Vector2(PWRV_W, PWRV_H)
+	_power_meter.custom_minimum_size = _power_meter.size
+	add_child(_power_meter)
+	_power_meter.hide()
 
 
 func set_power(power: float) -> void:
-	_power_track.show()
-	var ih := PWRV_H - PWR_INSET * 2.0
-	var fh := ih * clampf(power, 0.0, 1.0)
-	# Reveal the gradient from the bottom up (top of the fill gets redder).
-	_power_clip.position.y = PWR_INSET + (ih - fh)
-	_power_clip.size.y = fh
-	_power_grad.position.y = -(ih - fh)
+	_power_meter.show()
+	_power_meter.set_value(power)
 
 
 func clear_power() -> void:
-	_power_track.hide()
+	_power_meter.hide()
 
 
-## Position everything from the actual viewport size.
-func layout(vp: Vector2) -> void:
+## Position everything from the viewport size. `gutter_left`/`gutter_right` are
+## the x of the table's outer wood edges, so side widgets stay off the felt.
+func layout(vp: Vector2, gutter_left: float = -1.0, gutter_right: float = -1.0) -> void:
 	var w := vp.x
 	var h := vp.y
+	if gutter_left < 0.0:
+		gutter_left = w * 0.14
+	if gutter_right < 0.0:
+		gutter_right = w * 0.86
 	_cards[0]["panel"].position = Vector2(40, 26)
 	_cards[1]["panel"].position = Vector2(w - 40 - CARD_W, 26)
 	_pill.position = Vector2(w * 0.5 - PILL_W * 0.5, 38)
@@ -171,9 +132,12 @@ func layout(vp: Vector2) -> void:
 	_hint.position = Vector2(w * 0.5 - _hint.size.x * 0.5, h - 46)
 	_flash.position = Vector2(w * 0.5 - _flash.size.x * 0.5, 150)
 	_timer.position = Vector2(w * 0.5 - _timer.size.x * 0.5, 112)
-	_power_track.position = Vector2(26, h * 0.42 - PWRV_H * 0.5)
+	# Power meter + spin selector live in the LEFT gutter, kept off the felt.
+	var pm_x := clampf((gutter_left - PWRV_W) * 0.5, 6.0, maxf(6.0, gutter_left - PWRV_W - 6.0))
+	_power_meter.position = Vector2(pm_x, h * 0.40 - PWRV_H * 0.5)
+	var sp_x := clampf((gutter_left - spin.size.x) * 0.5, 6.0, maxf(6.0, gutter_left - spin.size.x - 6.0))
+	spin.position = Vector2(sp_x, h - 34.0 - spin.size.y)
 	_shoot_btn.position = Vector2(w - 44 - _shoot_btn.size.x, h - 44 - _shoot_btn.size.y)
-	spin.position = Vector2(44, h - 44 - spin.size.y)
 
 
 func _build_styles() -> void:
