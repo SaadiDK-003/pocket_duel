@@ -49,6 +49,7 @@ var chrome_lo: Color = Color(0.26, 0.29, 0.36)
 var sight_color: Color = Color(0.92, 0.90, 0.82)
 
 var _felt_grad: GradientTexture2D            # Radial spotlight over the bed.
+var _felt_tex: ImageTexture                  # Subtle cloth-grain texture.
 
 
 func setup(rect: Rect2) -> void:
@@ -63,9 +64,27 @@ func setup(rect: Rect2) -> void:
 	cushion_color = _brighten(felt_color, 1.20, 1.0)    # mid-tone face
 	cushion_top = _brighten(felt_color, 1.55, 0.92)     # bright top bevel
 	_build_felt_gradient()
+	_build_felt_texture()
 	_compute_geometry()
 	_build_pockets()
 	queue_redraw()
+
+
+## Fine cloth-grain texture, tiled over the bed at low opacity for a premium,
+## non-flat felt look.
+func _build_felt_texture() -> void:
+	var noise := FastNoiseLite.new()
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = 0.22
+	noise.seed = 3
+	noise.fractal_octaves = 3
+	var w := 128
+	var img := Image.create(w, w, false, Image.FORMAT_RGBA8)
+	for y in w:
+		for x in w:
+			var v: float = noise.get_noise_2d(float(x), float(y)) * 0.5 + 0.5
+			img.set_pixel(x, y, Color(v, v, v, 1.0))
+	_felt_tex = ImageTexture.create_from_image(img)
 
 
 ## Brighten a colour while keeping its hue & saturation (value * vf, sat * sf).
@@ -170,6 +189,8 @@ func _draw() -> void:
 	_round_rect(felt_rect, 14.0, felt_dark)
 	if _felt_grad != null:
 		draw_texture_rect(_felt_grad, felt_rect, false)
+	if _felt_tex != null:
+		draw_texture_rect(_felt_tex, felt_rect, true, Color(1, 1, 1, 0.05))   # cloth grain
 	_round_rect_outline(felt_rect, 14.0, felt_dark.darkened(0.2), 3.0)
 
 	# Baulk line + "D".

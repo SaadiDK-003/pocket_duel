@@ -16,8 +16,9 @@ const CARD_W: float = 320.0
 const CARD_H: float = 84.0
 const PILL_W: float = 360.0
 const PILL_H: float = 62.0
-const PWR_W: float = 420.0
-const PWR_H: float = 26.0
+const PWRV_W: float = 46.0        # Vertical power meter (8-ball-pool style).
+const PWRV_H: float = 380.0
+const PWR_INSET: float = 5.0
 
 const ON_COLORS: Dictionary = {
 	"RED": Color(0.82, 0.12, 0.12), "YELLOW": Color(0.96, 0.82, 0.14),
@@ -42,8 +43,8 @@ var _hint: Label
 var _flash: Label
 var _timer: Label
 var _power_track: Panel
-var _power_fill: Panel
-var _power_label: Label
+var _power_clip: Control
+var _power_grad: TextureRect
 var _shoot_btn: Button
 
 
@@ -99,40 +100,59 @@ func set_shoot_visible(v: bool) -> void:
 	_shoot_btn.visible = v
 
 
+## A vertical power meter (8-ball-pool style): a dark track with a yellow→red
+## gradient that fills UP from the bottom as power increases.
 func _make_power_bar() -> void:
 	_power_track = Panel.new()
-	_power_track.size = Vector2(PWR_W, PWR_H)
+	_power_track.size = Vector2(PWRV_W, PWRV_H)
 	var st := StyleBoxFlat.new()
-	st.bg_color = Color(0.05, 0.06, 0.08, 0.85)
-	st.set_corner_radius_all(int(PWR_H * 0.5))
+	st.bg_color = Color(0.05, 0.06, 0.08, 0.88)
+	st.set_corner_radius_all(int(PWRV_W * 0.5))
+	st.set_border_width_all(2)
+	st.border_color = Color(1, 1, 1, 0.12)
 	_power_track.add_theme_stylebox_override("panel", st)
 	add_child(_power_track)
 
-	_power_fill = Panel.new()
-	_power_fill.position = Vector2(3, 3)
-	_power_fill.size = Vector2(0, PWR_H - 6)
-	var sf := StyleBoxFlat.new()
-	sf.bg_color = Color(1, 1, 1)
-	sf.set_corner_radius_all(int((PWR_H - 6) * 0.5))
-	_power_fill.add_theme_stylebox_override("panel", sf)
-	_power_track.add_child(_power_fill)
+	var iw := PWRV_W - PWR_INSET * 2.0
+	var ih := PWRV_H - PWR_INSET * 2.0
+	_power_clip = Control.new()
+	_power_clip.clip_contents = true
+	_power_clip.position = Vector2(PWR_INSET, PWR_INSET + ih)   # zero-height at the bottom
+	_power_clip.size = Vector2(iw, 0)
+	_power_track.add_child(_power_clip)
 
-	_power_label = Label.new()
-	_power_label.text = "POWER"
-	_power_label.size = Vector2(PWR_W, 24)
-	_power_label.position = Vector2(0, -30)
-	_power_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_power_label.add_theme_font_size_override("font_size", 20)
-	_power_label.add_theme_color_override("font_color", TEXT_DIM)
-	_power_track.add_child(_power_label)
+	_power_grad = TextureRect.new()
+	_power_grad.texture = _build_power_gradient()
+	_power_grad.size = Vector2(iw, ih)
+	_power_grad.stretch_mode = TextureRect.STRETCH_SCALE
+	_power_clip.add_child(_power_grad)
 
 	_power_track.hide()
 
 
+## Vertical gradient for the meter: red (top / full power) -> orange -> yellow.
+func _build_power_gradient() -> GradientTexture2D:
+	var g := Gradient.new()
+	g.set_offset(0, 0.0); g.set_color(0, Color(0.95, 0.20, 0.12))   # top = red
+	g.set_offset(1, 1.0); g.set_color(1, Color(1.0, 0.85, 0.16))    # bottom = yellow
+	g.add_point(0.5, Color(0.98, 0.55, 0.13))                       # orange
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.width = 16
+	gt.height = 256
+	gt.fill_from = Vector2(0, 0)
+	gt.fill_to = Vector2(0, 1)
+	return gt
+
+
 func set_power(power: float) -> void:
 	_power_track.show()
-	_power_fill.size.x = (PWR_W - 6.0) * clampf(power, 0.0, 1.0)
-	_power_fill.modulate = Color(0.4, 0.85, 0.35).lerp(Color(0.96, 0.35, 0.2), power)
+	var ih := PWRV_H - PWR_INSET * 2.0
+	var fh := ih * clampf(power, 0.0, 1.0)
+	# Reveal the gradient from the bottom up (top of the fill gets redder).
+	_power_clip.position.y = PWR_INSET + (ih - fh)
+	_power_clip.size.y = fh
+	_power_grad.position.y = -(ih - fh)
 
 
 func clear_power() -> void:
@@ -151,7 +171,7 @@ func layout(vp: Vector2) -> void:
 	_hint.position = Vector2(w * 0.5 - _hint.size.x * 0.5, h - 46)
 	_flash.position = Vector2(w * 0.5 - _flash.size.x * 0.5, 150)
 	_timer.position = Vector2(w * 0.5 - _timer.size.x * 0.5, 112)
-	_power_track.position = Vector2(w * 0.5 - PWR_W * 0.5, h - 74)
+	_power_track.position = Vector2(26, h * 0.42 - PWRV_H * 0.5)
 	_shoot_btn.position = Vector2(w - 44 - _shoot_btn.size.x, h - 44 - _shoot_btn.size.y)
 	spin.position = Vector2(44, h - 44 - spin.size.y)
 
