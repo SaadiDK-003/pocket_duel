@@ -124,14 +124,16 @@ func layout(vp: Vector2, gutter_left: float = -1.0, gutter_right: float = -1.0) 
 		gutter_left = w * 0.14
 	if gutter_right < 0.0:
 		gutter_right = w * 0.86
-	_cards[0]["panel"].position = Vector2(40, 26)
-	_cards[1]["panel"].position = Vector2(w - 40 - CARD_W, 26)
-	_pill.position = Vector2(w * 0.5 - PILL_W * 0.5, 38)
-	_pause.position = Vector2(w - 40 - _pause.size.x, 26 + CARD_H + 14)
+	# Top band: left card, then right card + pause tucked in the top-right corner
+	# (pause no longer hangs down onto the table).
+	_cards[0]["panel"].position = Vector2(34, 22)
+	_pause.position = Vector2(w - 34 - _pause.size.x, 22)
+	_cards[1]["panel"].position = Vector2(w - 34 - _pause.size.x - 12 - CARD_W, 22)
+	_pill.position = Vector2(w * 0.5 - PILL_W * 0.5, 20)
+	_timer.position = Vector2(w * 0.5 - _timer.size.x * 0.5, 88)
 	_mode.position = Vector2(w - 60 - _mode.size.x, h - 46)
 	_hint.position = Vector2(w * 0.5 - _hint.size.x * 0.5, h - 46)
 	_flash.position = Vector2(w * 0.5 - _flash.size.x * 0.5, 150)
-	_timer.position = Vector2(w * 0.5 - _timer.size.x * 0.5, 112)
 	# Power meter + spin selector live in the LEFT gutter, kept off the felt.
 	var pm_x := clampf((gutter_left - PWRV_W) * 0.5, 6.0, maxf(6.0, gutter_left - PWRV_W - 6.0))
 	_power_meter.position = Vector2(pm_x, h * 0.40 - PWRV_H * 0.5)
@@ -224,6 +226,8 @@ func _make_center_pill() -> void:
 	_on_ball = BallPreview.new()
 	_on_ball.custom_minimum_size = Vector2(42, 42)
 	_on_ball.style = "classic"
+	_on_ball.lift = 0.0                         # dead-centre next to the text
+	_on_ball.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_on_ball.base = ON_COLORS["RED"]
 	row.add_child(_on_ball)
 	_on_text = _mini_label(row, "RED", 26, TEXT_BRIGHT)

@@ -7,6 +7,7 @@ extends Control
 var base: Color = Color(0.80, 0.09, 0.09)
 var style: String = "classic"
 var multi: bool = false                 # true = draw an "any colour" ball
+var lift: float = -0.14                 # vertical offset (× radius); 0 = dead centre
 
 # The six snooker colours, for the multi ("any colour") ball.
 const MULTI_COLORS: Array[Color] = [
@@ -17,7 +18,7 @@ const MULTI_COLORS: Array[Color] = [
 
 func _draw() -> void:
 	var r := minf(size.x, size.y) * 0.30
-	var c := size * 0.5 + Vector2(0, -r * 0.14)
+	var c := size * 0.5 + Vector2(0, r * lift)
 	if multi:
 		_paint_multi(c, r)
 	else:

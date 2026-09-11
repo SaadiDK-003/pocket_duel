@@ -183,7 +183,7 @@ func _layout() -> void:
 
 
 func _compute_play_rect(vp: Vector2) -> Rect2:
-	var top := 160.0        # Clear the top score cards (now compact).
+	var top := 210.0        # Clear the top score cards, pill, timer & pause.
 	var bottom := 120.0     # Clear the bottom mode/hint text.
 	var side := 96.0
 	var avail_w := vp.x - side * 2.0
