@@ -28,9 +28,13 @@ var style: String = "classic"    # Ball-set finish (see BallPainter / Cosmetics)
 var starting_position: Vector2 = Vector2.ZERO
 
 # --- Pot animation (sink into the pocket) ---
-const SINK_TIME: float = 0.34
+# The drop duration is derived from the ball's SPEED (fast ball -> quick drop,
+# slow ball -> gentle drop) so it never visibly decelerates to fill a fixed time.
+const SINK_MIN: float = 0.10
+const SINK_MAX: float = 0.28
 var _sinking: bool = false
 var _sink_t: float = 0.0
+var _sink_dur: float = 0.20                # This pot's duration (from speed).
 var _sink_target: Vector2 = Vector2.ZERO   # Local vector to the pocket centre.
 var _sink_dir: Vector2 = Vector2.ZERO      # Ball's travel direction at capture.
 var _sink_speed: float = 0.0               # Ball's speed at capture.
@@ -62,6 +66,9 @@ func pot_into(pocket_pos: Vector2) -> void:
 	_sink_target = pocket_pos - position
 	_sink_speed = velocity.length()
 	_sink_dir = velocity / _sink_speed if _sink_speed > 1.0 else _sink_target.normalized()
+	# Duration from speed: the ball keeps its pace into the hole (no slowdown).
+	var dist := maxf(_sink_target.length(), 1.0)
+	_sink_dur = clampf(dist / maxf(_sink_speed, 1.0), SINK_MIN, SINK_MAX)
 	velocity = Vector2.ZERO
 	_sinking = true
 	_sink_t = 0.0
@@ -72,8 +79,8 @@ func pot_into(pocket_pos: Vector2) -> void:
 func _process(delta: float) -> void:
 	if not _sinking:
 		return
-	_sink_t += delta / SINK_TIME
-	if _sink_t >= 1.0:
+	_sink_t += delta
+	if _sink_t >= _sink_dur:
 		_end_sink()
 		visible = false
 	queue_redraw()
@@ -107,11 +114,11 @@ func _draw() -> void:
 	if is_potted and not _sinking:
 		return
 	if _sinking:
-		var t := clampf(_sink_t, 0.0, 1.0)
+		var t := clampf(_sink_t / _sink_dur, 0.0, 1.0)
 		# 1) Path: a quadratic Bézier that leaves in the ball's TRAVEL direction and
 		#    curves into the pocket, so momentum is preserved (no sideways snap).
 		var dist := _sink_target.length()
-		var ctrl_len := clampf(_sink_speed * SINK_TIME * 0.5, dist * 0.3, dist * 0.9)
+		var ctrl_len := clampf(_sink_speed * _sink_dur * 0.5, dist * 0.3, dist * 0.9)
 		var p1 := _sink_dir * ctrl_len                       # control point offset
 		var c := 2.0 * (1.0 - t) * t * p1 + t * t * _sink_target   # P0 = 0
 		# 2) Roll to the hole first, THEN drop in: hold size until ~30%, then shrink.
