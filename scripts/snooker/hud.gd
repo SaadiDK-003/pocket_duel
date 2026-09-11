@@ -33,7 +33,7 @@ var _style_active: StyleBoxFlat
 var _style_idle: StyleBoxFlat
 var _pill: Panel
 var _pause: Button
-var _on_dot: Label
+var _on_ball: BallPreview
 var _on_text: Label
 var _sep: Label
 var _break: Label
@@ -43,6 +43,7 @@ var _flash: Label
 var _timer: Label
 var _power_track: Panel
 var _power_fill: Panel
+var _power_label: Label
 var _shoot_btn: Button
 
 
@@ -115,6 +116,16 @@ func _make_power_bar() -> void:
 	sf.set_corner_radius_all(int((PWR_H - 6) * 0.5))
 	_power_fill.add_theme_stylebox_override("panel", sf)
 	_power_track.add_child(_power_fill)
+
+	_power_label = Label.new()
+	_power_label.text = "POWER"
+	_power_label.size = Vector2(PWR_W, 24)
+	_power_label.position = Vector2(0, -30)
+	_power_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_power_label.add_theme_font_size_override("font_size", 20)
+	_power_label.add_theme_color_override("font_color", TEXT_DIM)
+	_power_track.add_child(_power_label)
+
 	_power_track.hide()
 
 
@@ -151,8 +162,8 @@ func _build_styles() -> void:
 	_style_active.set_corner_radius_all(20)
 	_style_active.set_border_width_all(3)
 	_style_active.border_color = ACCENT
-	_style_active.shadow_color = Color(0, 0, 0, 0.35)
-	_style_active.shadow_size = 8
+	_style_active.shadow_color = Color(ACCENT.r, ACCENT.g, ACCENT.b, 0.30)   # gold glow
+	_style_active.shadow_size = 12
 	_style_idle = StyleBoxFlat.new()
 	_style_idle.bg_color = Color(0.09, 0.10, 0.13, 0.78)
 	_style_idle.set_corner_radius_all(20)
@@ -226,7 +237,11 @@ func _make_center_pill() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	center.add_child(row)
-	_on_dot = _mini_label(row, "●", 30, Color(1, 1, 1))
+	_on_ball = BallPreview.new()
+	_on_ball.custom_minimum_size = Vector2(42, 42)
+	_on_ball.style = "classic"
+	_on_ball.base = ON_COLORS["RED"]
+	row.add_child(_on_ball)
 	_on_text = _mini_label(row, "RED", 26, TEXT_BRIGHT)
 	_sep = _mini_label(row, "•", 24, TEXT_DIM)
 	_break = _mini_label(row, "", 24, ACCENT)
@@ -288,7 +303,8 @@ func refresh(turn: TurnManager, on_ball: String = "") -> void:
 		_pill.hide()
 		return
 	_pill.show()
-	_on_dot.add_theme_color_override("font_color", ON_COLORS.get(on_ball, Color(1, 1, 1)))
+	_on_ball.base = ON_COLORS.get(on_ball, Color(1, 1, 1))
+	_on_ball.queue_redraw()
 	_on_text.text = on_ball
 	if turn.break_score > 0:
 		_sep.show()
