@@ -209,17 +209,33 @@ func _cushion(a: Vector2, b: Vector2, out: Vector2) -> void:
 	var nose_b := b - along * JAW
 	var ba := a + back                      # back corners, at the wood rail
 	var bb := b + back
+	var rf := CUSHION_W * 0.40              # jaw-tip fillet radius (rounded rubber)
 	# 1) Soft shadow cast on the felt just in front of the nose.
 	draw_colored_polygon(PackedVector2Array([nose_a - out * 8.0, nose_b - out * 8.0, nose_b, nose_a]), Color(0, 0, 0, 0.16))
-	# 2) Full cushion body (mid-tone face), ends mitered into the pockets.
-	draw_colored_polygon(PackedVector2Array([ba, bb, nose_b, nose_a]), cushion_color)
+	# 2) Full cushion body (mid-tone face) with ROUNDED jaw tips that curve into
+	#    the pockets (fillet the two nose corners).
+	var body := PackedVector2Array([ba, bb])
+	_append_fillet(body, bb, nose_b, nose_a, rf)
+	_append_fillet(body, nose_b, nose_a, ba, rf)
+	draw_colored_polygon(body, cushion_color)
 	# 3) Bright top surface over the back ~55% (mitered to match via lerp).
 	var ta := nose_a.lerp(ba, 0.45)
 	var tb := nose_b.lerp(bb, 0.45)
 	draw_colored_polygon(PackedVector2Array([ba, bb, tb, ta]), cushion_top)
-	# 4) Thin dark seam where the cushion meets the wood, + bright nose edge.
+	# 4) Thin dark seam where the cushion meets the wood, + bright nose edge
+	#    (pulled in to the fillet so it follows the rounded tips).
 	draw_line(ba, bb, cushion_color.darkened(0.35), 2.0, true)
-	draw_line(nose_a, nose_b, cushion_top.lightened(0.18), 2.6, true)
+	draw_line(nose_a + along * rf, nose_b - along * rf, cushion_top.lightened(0.18), 2.6, true)
+
+
+## Append a rounded corner (quadratic-Bézier fillet) at `corner`, coming from the
+## `prev` edge and leaving toward `next`, with radius `rf`.
+func _append_fillet(pts: PackedVector2Array, prev: Vector2, corner: Vector2, next: Vector2, rf: float) -> void:
+	var p1 := corner + (prev - corner).normalized() * rf
+	var p2 := corner + (next - corner).normalized() * rf
+	for i in range(6):
+		var t := i / 5.0
+		pts.append((1.0 - t) * (1.0 - t) * p1 + 2.0 * (1.0 - t) * t * corner + t * t * p2)
 
 
 func _draw_pockets() -> void:
