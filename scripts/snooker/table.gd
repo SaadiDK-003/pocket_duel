@@ -58,12 +58,19 @@ func setup(rect: Rect2) -> void:
 	felt_color = GameState.cloth_color()
 	felt_light = felt_color.lightened(0.30)
 	felt_dark = felt_color.darkened(0.32)
-	cushion_color = felt_color.lightened(0.16)   # mid-tone face
-	cushion_top = felt_color.lightened(0.44)     # bright top bevel
+	# Brighten in HSV (keep the hue & saturation) so the cushion stays a rich
+	# version of the cloth colour instead of washing out to a pale tint.
+	cushion_color = _brighten(felt_color, 1.20, 1.0)    # mid-tone face
+	cushion_top = _brighten(felt_color, 1.55, 0.92)     # bright top bevel
 	_build_felt_gradient()
 	_compute_geometry()
 	_build_pockets()
 	queue_redraw()
+
+
+## Brighten a colour while keeping its hue & saturation (value * vf, sat * sf).
+func _brighten(c: Color, vf: float, sf: float) -> Color:
+	return Color.from_hsv(c.h, clampf(c.s * sf, 0.0, 1.0), clampf(c.v * vf, 0.0, 1.0), c.a)
 
 
 ## A radial gradient texture (bright centre -> dark rim) drawn over the bed for
