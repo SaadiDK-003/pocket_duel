@@ -24,7 +24,7 @@ var pocket_radius: float = 42.0            # Capture radius.
 # --- Look & feel (scaled to the table) ---
 const CUSHION_W: float = 30.0              # Cushion band thickness.
 const RAIL_W: float = 46.0                 # Wooden frame beyond the cushions.
-const JAW: float = 16.0                    # How far cushion noses angle into pockets.
+const JAW: float = 24.0                    # How far cushion noses angle into pockets.
 var corner_open: float = 44.0              # Cushion pullback near corner pockets.
 var mid_open: float = 36.0                 # Cushion pullback near middle pockets.
 var corner_hole: float = 34.0
@@ -58,8 +58,8 @@ func setup(rect: Rect2) -> void:
 	felt_color = GameState.cloth_color()
 	felt_light = felt_color.lightened(0.30)
 	felt_dark = felt_color.darkened(0.32)
-	cushion_color = felt_color.lightened(0.08)
-	cushion_top = felt_color.lightened(0.32)
+	cushion_color = felt_color.lightened(0.16)   # mid-tone face
+	cushion_top = felt_color.lightened(0.44)     # bright top bevel
 	_build_felt_gradient()
 	_compute_geometry()
 	_build_pockets()
@@ -154,6 +154,7 @@ func _draw() -> void:
 	_round_rect(outer.grow(-4.0), 36.0, wood_color)
 	_round_rect(outer.grow(-4.0), 36.0, wood_light)     # bevel...
 	_round_rect(outer.grow(-9.0), 31.0, wood_color)     # ...leaving a thin highlight.
+	_draw_wood_grain(felt_rect, outer)
 
 	# Rail sight dots on the wood (between the cushions and the outer edge).
 	_draw_sight_dots(felt_rect)
@@ -191,19 +192,27 @@ func _draw_cushions() -> void:
 
 
 ## One cushion segment: a from/to along the nose line, `out` points to the frame.
+## Ends are MITERED toward the pockets (the "jaws"), with a 3-tone bevel — a
+## bright top surface, a mid-tone face, a highlighted nose, and a soft shadow it
+## casts on the felt — matching the 8-ball-pool look.
 func _cushion(a: Vector2, b: Vector2, out: Vector2) -> void:
 	var along := (b - a).normalized()
 	var back := out * CUSHION_W
-	var bevel := out * (CUSHION_W * 0.5)
 	var nose_a := a + along * JAW
 	var nose_b := b - along * JAW
-	# Sloped face (nose -> mid) in the base colour...
-	draw_colored_polygon(PackedVector2Array([a + bevel, b + bevel, nose_b, nose_a]), cushion_color.darkened(0.10))
-	# ...and the flat top surface (mid -> back) in the lighter bevel colour.
-	draw_colored_polygon(PackedVector2Array([a + back, b + back, b + bevel, a + bevel]), cushion_top)
-	# Bright nose edge along the playing line, plus a soft shadow it casts on the bed.
-	draw_line(nose_a, nose_b, cushion_top.lightened(0.12), 2.5, true)
-	draw_line(nose_a - out * 3.0, nose_b - out * 3.0, Color(0, 0, 0, 0.14), 5.0)
+	var ba := a + back                      # back corners, at the wood rail
+	var bb := b + back
+	# 1) Soft shadow cast on the felt just in front of the nose.
+	draw_colored_polygon(PackedVector2Array([nose_a - out * 8.0, nose_b - out * 8.0, nose_b, nose_a]), Color(0, 0, 0, 0.16))
+	# 2) Full cushion body (mid-tone face), ends mitered into the pockets.
+	draw_colored_polygon(PackedVector2Array([ba, bb, nose_b, nose_a]), cushion_color)
+	# 3) Bright top surface over the back ~55% (mitered to match via lerp).
+	var ta := nose_a.lerp(ba, 0.45)
+	var tb := nose_b.lerp(bb, 0.45)
+	draw_colored_polygon(PackedVector2Array([ba, bb, tb, ta]), cushion_top)
+	# 4) Thin dark seam where the cushion meets the wood, + bright nose edge.
+	draw_line(ba, bb, cushion_color.darkened(0.35), 2.0, true)
+	draw_line(nose_a, nose_b, cushion_top.lightened(0.18), 2.6, true)
 
 
 func _draw_pockets() -> void:
@@ -221,6 +230,33 @@ func _draw_pocket(pos: Vector2, hole: float) -> void:
 	draw_arc(pos, hole * 1.05, 0.0, TAU, 44, Color(0.60, 0.63, 0.68, 0.55), 2.0, true)  # thin silver edge
 	draw_circle(pos, hole, Color(0.015, 0.015, 0.02))                 # the hole (near-black)
 	draw_circle(pos - Vector2(hole * 0.20, hole * 0.20), hole * 0.55, Color(0.05, 0.05, 0.06))  # faint depth
+
+
+## Faint lengthwise wood grain on the four rails (streaks running along each rail).
+func _draw_wood_grain(felt_rect: Rect2, outer: Rect2) -> void:
+	var corner := 44.0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20240611
+	# Top & bottom rails: horizontal streaks.
+	for band in [[outer.position.y + 6.0, felt_rect.position.y], [felt_rect.end.y, outer.end.y - 6.0]]:
+		var x0 := outer.position.x + corner
+		var x1 := outer.end.x - corner
+		for i in range(11):
+			var yy: float = lerpf(band[0], band[1], (i + 0.5) / 11.0)
+			var dark := i % 2 == 0
+			var base := wood_dark if dark else wood_light
+			var col := Color(base.r, base.g, base.b, rng.randf_range(0.08, 0.20))
+			draw_line(Vector2(x0, yy), Vector2(x1, yy), col, rng.randf_range(1.0, 2.0))
+	# Left & right rails: vertical streaks.
+	for band in [[outer.position.x + 6.0, felt_rect.position.x], [felt_rect.end.x, outer.end.x - 6.0]]:
+		var y0 := outer.position.y + corner
+		var y1 := outer.end.y - corner
+		for i in range(11):
+			var xx: float = lerpf(band[0], band[1], (i + 0.5) / 11.0)
+			var dark := i % 2 == 0
+			var base := wood_dark if dark else wood_light
+			var col := Color(base.r, base.g, base.b, rng.randf_range(0.08, 0.20))
+			draw_line(Vector2(xx, y0), Vector2(xx, y1), col, rng.randf_range(1.0, 2.0))
 
 
 ## Sight dots (diamonds) evenly spaced along the wooden rails.
