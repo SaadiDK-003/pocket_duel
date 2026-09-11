@@ -185,11 +185,23 @@ func _cushion(a: Vector2, b: Vector2, out: Vector2) -> void:
 
 
 func _draw_pockets() -> void:
+	var c := play_rect.get_center()
 	for p in pockets:
 		var pos: Vector2 = p["pos"]
 		var is_mid: bool = absf(pos.y - play_rect.position.y) > 1.0 and absf(pos.y - play_rect.end.y) > 1.0
 		var hole: float = mid_hole if is_mid else corner_hole
-		_chrome_pocket(pos, hole)
+		# Seat the visible hole OUTWARD into the corner/rail (the physics capture
+		# point stays at `pos`; the hole is big enough to still cover it). This
+		# removes the felt sliver that made the pocket look like two holes.
+		var outv: Vector2
+		var push: float
+		if is_mid:
+			outv = Vector2(0.0, signf(pos.y - c.y))
+			push = CUSHION_W * 0.55
+		else:
+			outv = Vector2(signf(pos.x - c.x), signf(pos.y - c.y)).normalized()
+			push = CUSHION_W * 0.60
+		_chrome_pocket(pos + outv * push, hole)
 
 
 ## A shiny chrome pocket fitting with the black hole in it (8-ball-pool style).
