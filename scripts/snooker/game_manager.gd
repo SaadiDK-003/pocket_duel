@@ -86,6 +86,8 @@ const MENU_SCENE: String = "res://scenes/main_menu/main_menu.tscn"
 
 var _last_vp: Vector2 = Vector2.ZERO
 var _confetti: CanvasLayer = null
+var _shake_amt: float = 0.0          # Current screen-shake magnitude (px).
+var _base_pos: Vector2 = Vector2.ZERO
 var _timer_active: bool = false
 var _shot_time_left: float = 0.0
 var _last_tick_sec: int = -1
@@ -93,6 +95,7 @@ var _last_tick_sec: int = -1
 
 func _process(delta: float) -> void:
 	_simulate(delta)
+	_update_shake(delta)
 	if _timer_active and not _paused:
 		_shot_time_left -= delta
 		if _shot_time_left <= 0.0:
@@ -152,6 +155,7 @@ func _ready() -> void:
 	hud.shoot_pressed.connect(cue.request_fire)
 	hud.cancel_pressed.connect(cue._cancel)
 	get_viewport().size_changed.connect(_on_resize)
+	_base_pos = position
 	_layout()
 	_start_mode(GameState.mode)
 
@@ -580,6 +584,8 @@ func _simulate(delta: float) -> void:
 
 	if not any_moving:
 		_balls_moving = false
+		_shake_amt = 0.0            # never leave the table offset when control returns
+		position = _base_pos
 		_evaluate_shot()
 		# In-off: bring the cue ball back into the D, in hand.
 		if cue_ball.is_potted:
@@ -608,8 +614,11 @@ func _play_impact_sounds() -> void:
 			# First real contact with the pack: play the scatter, once.
 			_break_shot = false
 			Audio.play("break", -2.0)
+			_add_shake(6.5)
+			_vibrate(55)
 		else:
 			Audio.play("ball_hit", _impact_db(_frame_ball_impact), 0.12)
+			_add_shake(clampf(_frame_ball_impact / 320.0, 0.0, 3.5))   # harder hit, bigger shake
 	if _frame_cushion_impact > 80.0:
 		Audio.play("cushion", _impact_db(_frame_cushion_impact), 0.10)
 
@@ -862,7 +871,50 @@ func _pot_ball(b: Ball, pocket_pos: Vector2) -> void:
 	if b not in _potted_this_shot:
 		_potted_this_shot.append(b)
 		Audio.play("pocket")
-		_vibrate(30)
+		_vibrate(35)
+		_pot_sparkle(pocket_pos, b.color)
+		_add_shake(2.5)
+
+
+## Screen shake: nudge the table root (background & HUD are separate layers, so
+## they don't move). Only ever runs while balls are in motion.
+func _add_shake(amount: float) -> void:
+	_shake_amt = maxf(_shake_amt, amount)
+
+
+func _update_shake(delta: float) -> void:
+	if _shake_amt > 0.05:
+		position = _base_pos + Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * _shake_amt
+		_shake_amt = maxf(_shake_amt - 42.0 * delta, 0.0)
+	elif position != _base_pos:
+		position = _base_pos
+
+
+## A quick particle burst in the ball's colour when it drops — pot "juice".
+func _pot_sparkle(pos: Vector2, col: Color) -> void:
+	var p := CPUParticles2D.new()
+	p.position = pos
+	p.z_index = 60
+	p.one_shot = true
+	p.explosiveness = 1.0
+	p.amount = 20
+	p.lifetime = 0.55
+	p.emitting = true
+	p.spread = 180.0
+	p.initial_velocity_min = 150.0
+	p.initial_velocity_max = 360.0
+	p.gravity = Vector2.ZERO
+	p.damping_min = 200.0
+	p.damping_max = 340.0
+	p.scale_amount_min = maxf(ball_radius * 0.20, 3.5)
+	p.scale_amount_max = maxf(ball_radius * 0.38, 6.0)
+	p.color = col.lightened(0.35)
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(1, 1, 1, 1))
+	ramp.set_color(1, Color(col.r, col.g, col.b, 0.0))
+	p.color_ramp = ramp
+	add_child(p)
+	p.finished.connect(p.queue_free)
 
 
 func _resolve_ball_collisions() -> void:
