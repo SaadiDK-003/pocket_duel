@@ -651,11 +651,17 @@ func _evaluate_shot() -> void:
 		_vibrate(60)
 	else:
 		if res["score"] > 0:
+			var before_break := turn.break_score
 			turn.add_score(res["score"])
 			hud.flash("+%d" % res["score"], Color(1.0, 0.9, 0.4))
 			# Milestone breaks unlock the instant they're reached.
 			for id in GameState.note_break(turn.break_score):
 				toast.show_id(id)
+			# Big-break flourish when the break crosses 50 / 100 this shot.
+			for m in [100, 50]:
+				if before_break < m and turn.break_score >= m:
+					_break_flourish(m)
+					break
 		if not res["keep_turn"]:
 			turn.switch_turn()
 			if res["score"] == 0:      # Clean miss/safety — announce the turn.
@@ -769,6 +775,8 @@ func _end_frame(forced_winner: int = -1) -> void:
 			subtitle)
 	else:
 		GameState.add_coins(10)             # Coins for winning a frame.
+		var vp := get_viewport().get_visible_rect().size
+		_confetti_burst(Vector2(vp.x * 0.5, vp.y * 0.62), 110)   # frame-win pop
 		var subtitle := "%d – %d   ·   match %d–%d   ·   +10 coins" % [
 			turn.scores[winner], turn.scores[1 - winner],
 			turn.frames_won[0], turn.frames_won[1]]
@@ -787,26 +795,33 @@ func _end_frame(forced_winner: int = -1) -> void:
 
 
 ## Confetti burst over the whole screen for a match win.
-func _celebrate() -> void:
-	_stop_celebrate()
-	_confetti = CanvasLayer.new()
-	_confetti.layer = 20                 # Above the match-complete overlay.
-	add_child(_confetti)
-
-	var img := Image.create(12, 16, false, Image.FORMAT_RGBA8)
-	img.fill(Color.WHITE)
-	var tex := ImageTexture.create_from_image(img)
-
+## Confetti colour ramp + a small rectangle texture, shared by all celebrations.
+func _confetti_ramp() -> Gradient:
 	var ramp := Gradient.new()
 	ramp.set_color(0, Color(0.95, 0.25, 0.28))
 	ramp.add_point(0.25, Color(0.98, 0.78, 0.28))
 	ramp.add_point(0.5, Color(0.30, 0.80, 0.40))
 	ramp.add_point(0.75, Color(0.25, 0.55, 0.95))
 	ramp.set_color(1, Color(0.85, 0.40, 0.85))
+	return ramp
+
+
+func _confetti_tex() -> ImageTexture:
+	var img := Image.create(12, 16, false, Image.FORMAT_RGBA8)
+	img.fill(Color.WHITE)
+	return ImageTexture.create_from_image(img)
+
+
+## Full-screen confetti rain — for a match win.
+func _celebrate() -> void:
+	_stop_celebrate()
+	_confetti = CanvasLayer.new()
+	_confetti.layer = 20                 # Above the match-complete overlay.
+	add_child(_confetti)
 
 	var vp := get_viewport().get_visible_rect().size
 	var p := CPUParticles2D.new()
-	p.texture = tex
+	p.texture = _confetti_tex()
 	p.position = Vector2(vp.x * 0.5, -20.0)
 	p.amount = 240
 	p.lifetime = 4.5
@@ -822,14 +837,53 @@ func _celebrate() -> void:
 	p.angular_velocity_max = 400.0
 	p.scale_amount_min = 0.6
 	p.scale_amount_max = 1.3
-	p.color_initial_ramp = ramp
+	p.color_initial_ramp = _confetti_ramp()
 	_confetti.add_child(p)
+
+
+## A one-shot party-popper burst from `center` — for a frame win or a big break.
+func _confetti_burst(center: Vector2, amount: int) -> void:
+	var cl := CanvasLayer.new()
+	cl.layer = 20
+	add_child(cl)
+	var p := CPUParticles2D.new()
+	p.texture = _confetti_tex()
+	p.position = center
+	p.one_shot = true
+	p.explosiveness = 0.92
+	p.amount = amount
+	p.lifetime = 2.2
+	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_POINT
+	p.direction = Vector2(0, -1)
+	p.spread = 60.0
+	p.gravity = Vector2(0, 660)
+	p.initial_velocity_min = 320.0
+	p.initial_velocity_max = 680.0
+	p.angular_velocity_min = -520.0
+	p.angular_velocity_max = 520.0
+	p.scale_amount_min = 0.6
+	p.scale_amount_max = 1.3
+	p.color_initial_ramp = _confetti_ramp()
+	cl.add_child(p)
+	p.emitting = true
+	p.finished.connect(cl.queue_free)
 
 
 func _stop_celebrate() -> void:
 	if is_instance_valid(_confetti):
 		_confetti.queue_free()
 	_confetti = null
+
+
+## A celebratory flash + confetti burst for a milestone break (50 / 100).
+func _break_flourish(value: int) -> void:
+	var vp := get_viewport().get_visible_rect().size
+	_confetti_burst(Vector2(vp.x * 0.5, vp.y * 0.44), 80)
+	Audio.play("achieve")
+	if value >= 100:
+		hud.flash("CENTURY BREAK!  %d" % value, Color(1.0, 0.85, 0.30))
+	else:
+		hud.flash("GREAT BREAK!  %d" % value, Color(0.55, 0.90, 1.0))
 
 
 func _step(dt: float) -> void:
