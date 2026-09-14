@@ -24,6 +24,7 @@ var is_host: bool = false
 var is_networked: bool = false
 var peer: ENetMultiplayerPeer = null
 var host_name: String = "Player"
+var host_ip: String = ""              # the host's chosen LAN IP (advertised)
 var my_index: int = 0                # 0 = host (player 1), 1 = guest (player 2).
 var opponent_name: String = "Opponent"
 
@@ -54,10 +55,10 @@ func host_game(pname: String) -> bool:
 	is_host = true
 	is_networked = true
 	my_index = 0
-	print("[Net] Hosting on port %d. This machine's IP(s): %s" % [GAME_PORT, ", ".join(local_ips())])
+	host_ip = _best_ip()
+	print("[Net] Hosting on port %d. Advertising IP %s (all IPs: %s)" % [GAME_PORT, host_ip, ", ".join(local_ips())])
 	_bcast = PacketPeerUDP.new()
 	_bcast.set_broadcast_enabled(true)
-	_bcast.set_dest_address("255.255.255.255", DISCOVERY_PORT)
 	_bcast_t = 0.0
 	set_process(true)
 	return true
@@ -102,6 +103,38 @@ func local_ips() -> Array:
 	return out
 
 
+## Pick the most likely real LAN IP, avoiding Docker/virtual bridges (172.16–31).
+func _best_ip() -> String:
+	var ips := local_ips()
+	for a in ips:
+		if a.begins_with("192.168."):
+			return a
+	for a in ips:
+		if a.begins_with("10."):
+			return a
+	for a in ips:
+		if not _is_docker_ip(a):
+			return a
+	return ips[0] if ips.size() > 0 else "127.0.0.1"
+
+
+func _is_docker_ip(a: String) -> bool:
+	if a.begins_with("172."):
+		var parts := a.split(".")
+		if parts.size() >= 2:
+			var o := int(parts[1])
+			return o >= 16 and o <= 31
+	return false
+
+
+## The /24 subnet-directed broadcast address for `ip` (e.g. 192.168.1.255).
+func _broadcast_addr(ip: String) -> String:
+	var parts := ip.split(".")
+	if parts.size() == 4:
+		return "%s.%s.%s.255" % [parts[0], parts[1], parts[2]]
+	return "255.255.255.255"
+
+
 func join(ip: String, port: int) -> bool:
 	stop_discovery()
 	print("[Net] Connecting to %s:%d ..." % [ip, port])
@@ -142,16 +175,22 @@ func _process(delta: float) -> void:
 		_bcast_t -= delta
 		if _bcast_t <= 0.0:
 			_bcast_t = 1.0
-			var pkt := JSON.stringify({"m": MAGIC, "n": host_name, "p": GAME_PORT, "u": _uid})
-			_bcast.put_packet(pkt.to_utf8_buffer())
+			var pkt := JSON.stringify({"m": MAGIC, "n": host_name, "p": GAME_PORT, "u": _uid, "ip": host_ip}).to_utf8_buffer()
+			# Send to the WiFi subnet's directed broadcast AND the global one.
+			for addr in [_broadcast_addr(host_ip), "255.255.255.255"]:
+				_bcast.set_dest_address(addr, DISCOVERY_PORT)
+				_bcast.put_packet(pkt)
 	if _listen:
 		var changed := false
 		while _listen.get_available_packet_count() > 0:
 			var data := _listen.get_packet()
-			var ip := _listen.get_packet_ip()
+			var src := _listen.get_packet_ip()
 			var msg = JSON.parse_string(data.get_string_from_utf8())
 			if typeof(msg) == TYPE_DICTIONARY and msg.get("m") == MAGIC and int(msg.get("u", 0)) != _uid:
-				_hosts[ip] = {"name": str(msg.get("n", "Game")), "ip": ip, "port": int(msg.get("p", GAME_PORT)), "seen": Time.get_ticks_msec()}
+				var hip := str(msg.get("ip", ""))
+				if hip == "":
+					hip = src
+				_hosts[hip] = {"name": str(msg.get("n", "Game")), "ip": hip, "port": int(msg.get("p", GAME_PORT)), "seen": Time.get_ticks_msec()}
 				changed = true
 		var now := Time.get_ticks_msec()
 		for ip in _hosts.keys():
