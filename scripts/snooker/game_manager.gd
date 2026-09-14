@@ -150,6 +150,7 @@ func _ready() -> void:
 	add_child(toast)
 	hud.pause_requested.connect(_toggle_pause)
 	hud.shoot_pressed.connect(cue.request_fire)
+	hud.cancel_pressed.connect(cue._cancel)
 	get_viewport().size_changed.connect(_on_resize)
 	_layout()
 	_start_mode(GameState.mode)
@@ -177,11 +178,13 @@ func _layout() -> void:
 	# screen (bigger than the old fixed 18px on wide phones). Bounded by table
 	# WIDTH too, so the 15-red triangle always fits between the pink and black.
 	ball_radius = clampf(minf(table.play_rect.size.y * 0.030, table.play_rect.size.x * 0.0138), 15.0, 26.0)
-	hud.layout(vp)
+	# Pass the table's outer wood edges so side HUD widgets stay in the gutters.
+	var margin := Table.CUSHION_W + Table.RAIL_W
+	hud.layout(vp, table.play_rect.position.x - margin, table.play_rect.end.x + margin)
 
 
 func _compute_play_rect(vp: Vector2) -> Rect2:
-	var top := 160.0        # Clear the top score cards (now compact).
+	var top := 210.0        # Clear the top score cards, pill, timer & pause.
 	var bottom := 120.0     # Clear the bottom mode/hint text.
 	var side := 96.0
 	var avail_w := vp.x - side * 2.0
@@ -940,7 +943,7 @@ func _resolve_cushions() -> void:
 		# Open a gap in the top/bottom cushion at the middle pocket so a ball
 		# aimed into it can cross the rail line and drop (a rail-hugging ball
 		# outside this narrow mouth still bounces normally).
-		var in_mid_mouth := absf(b.position.x - r.get_center().x) < table.pocket_radius * 0.85
+		var in_mid_mouth := absf(b.position.x - r.get_center().x) < table.pocket_radius * 0.95
 		if b.position.x < left:
 			b.position.x = left
 			_frame_cushion_impact = maxf(_frame_cushion_impact, absf(b.velocity.x))

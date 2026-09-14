@@ -96,6 +96,7 @@ func _build() -> void:
 	grid.columns = cols
 	grid.add_theme_constant_override("h_separation", 14)
 	grid.add_theme_constant_override("v_separation", 12)
+	grid.mouse_filter = Control.MOUSE_FILTER_PASS   # let touch-drag reach the scroller
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(grid)
 	for id in Achievements.ORDER:
@@ -130,36 +131,45 @@ func _row(parent: Node, id: String, data: Dictionary) -> void:
 	st.content_margin_bottom = 14
 	pc.add_theme_stylebox_override("panel", st)
 	pc.size_flags_horizontal = Control.SIZE_EXPAND_FILL   # fill the grid column
+	# Non-interactive rows: let touch-drag pass through so the list scrolls
+	# smoothly no matter where the finger lands (was getting stuck on the rows).
+	pc.mouse_filter = Control.MOUSE_FILTER_PASS
 	parent.add_child(pc)
 
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 16)
+	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pc.add_child(hb)
 
 	var icon := Label.new()
 	icon.text = "🏅" if unlocked else "🔒"
 	icon.add_theme_font_size_override("font_size", 40)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hb.add_child(icon)
 
 	var txt := VBoxContainer.new()
 	txt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	txt.add_theme_constant_override("separation", 2)
+	txt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hb.add_child(txt)
 	var nm := Label.new()
 	nm.text = str(data["name"])
 	nm.add_theme_font_size_override("font_size", 32)
 	nm.add_theme_color_override("font_color", TEXT if unlocked else TEXT_DIM)
+	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	txt.add_child(nm)
 	var ds := Label.new()
 	ds.text = str(data["desc"])
 	ds.add_theme_font_size_override("font_size", 23)
 	ds.add_theme_color_override("font_color", TEXT_DIM)
+	ds.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	txt.add_child(ds)
 
 	var rw := Label.new()
 	rw.text = ("✓" if unlocked else "🪙 %d" % int(data["reward"]))
 	rw.add_theme_font_size_override("font_size", 30)
 	rw.add_theme_color_override("font_color", ACCENT)
+	rw.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hb.add_child(rw)
 
 

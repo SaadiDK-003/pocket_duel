@@ -129,9 +129,11 @@ func _swatch(kind: String, id: String, item: Dictionary, is_selected: bool) -> C
 	var owned: bool = GameState.is_owned(id)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 4)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL   # spread evenly across the row
 
 	var b := Button.new()
 	b.custom_minimum_size = Vector2(132, 112)
+	b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER   # keep the swatch centred in its cell
 	var sb := StyleBoxFlat.new()
 	# Ball sets show a ball preview on a dark bed; cloths/cues fill with the colour.
 	sb.bg_color = Color(0.06, 0.08, 0.10) if kind == "ball" else item["color"]

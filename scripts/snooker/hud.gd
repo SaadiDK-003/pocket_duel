@@ -8,16 +8,18 @@ extends CanvasLayer
 
 signal pause_requested
 signal shoot_pressed
+signal cancel_pressed
 
 const ACCENT: Color = Color(0.98, 0.78, 0.28)
 const TEXT_DIM: Color = Color(0.62, 0.67, 0.74)
 const TEXT_BRIGHT: Color = Color(0.96, 0.97, 0.99)
 const CARD_W: float = 320.0
 const CARD_H: float = 84.0
-const PILL_W: float = 360.0
+const PILL_W: float = 440.0
 const PILL_H: float = 62.0
-const PWR_W: float = 420.0
-const PWR_H: float = 26.0
+const PWRV_W: float = 46.0        # Vertical power meter (8-ball-pool style).
+const PWRV_H: float = 380.0
+const PWR_INSET: float = 5.0
 
 const ON_COLORS: Dictionary = {
 	"RED": Color(0.82, 0.12, 0.12), "YELLOW": Color(0.96, 0.82, 0.14),
@@ -33,7 +35,7 @@ var _style_active: StyleBoxFlat
 var _style_idle: StyleBoxFlat
 var _pill: Panel
 var _pause: Button
-var _on_dot: Label
+var _on_ball: BallPreview
 var _on_text: Label
 var _sep: Label
 var _break: Label
@@ -41,9 +43,9 @@ var _mode: Label
 var _hint: Label
 var _flash: Label
 var _timer: Label
-var _power_track: Panel
-var _power_fill: Panel
+var _power_meter: PowerMeter
 var _shoot_btn: Button
+var _cancel_btn: Button
 
 
 func setup() -> void:
@@ -90,6 +92,27 @@ func setup() -> void:
 	_shoot_btn.hide()
 	add_child(_shoot_btn)
 
+	# Cancel button — abort a set-up shot (appears next to SHOOT).
+	_cancel_btn = Button.new()
+	_cancel_btn.text = "✕ CANCEL"
+	_cancel_btn.custom_minimum_size = Vector2(190, 78)
+	_cancel_btn.size = Vector2(190, 78)
+	_cancel_btn.add_theme_font_size_override("font_size", 30)
+	var cs := StyleBoxFlat.new()
+	cs.bg_color = Color(0.16, 0.18, 0.22, 0.95)
+	cs.set_corner_radius_all(16)
+	cs.set_border_width_all(2)
+	cs.border_color = Color(1.0, 0.5, 0.42, 0.55)
+	_cancel_btn.add_theme_stylebox_override("normal", cs)
+	var csh := cs.duplicate(); csh.bg_color = Color(0.24, 0.20, 0.22, 0.98)
+	_cancel_btn.add_theme_stylebox_override("hover", csh)
+	_cancel_btn.add_theme_stylebox_override("pressed", csh)
+	_cancel_btn.add_theme_color_override("font_color", Color(1.0, 0.62, 0.55))
+	_cancel_btn.add_theme_color_override("font_hover_color", Color(1.0, 0.72, 0.65))
+	_cancel_btn.pressed.connect(func(): Audio.play("ui_click"); cancel_pressed.emit())
+	_cancel_btn.hide()
+	add_child(_cancel_btn)
+
 	spin = SpinSelector.new()
 	add_child(spin)
 
@@ -98,51 +121,53 @@ func set_shoot_visible(v: bool) -> void:
 	_shoot_btn.visible = v
 
 
-func _make_power_bar() -> void:
-	_power_track = Panel.new()
-	_power_track.size = Vector2(PWR_W, PWR_H)
-	var st := StyleBoxFlat.new()
-	st.bg_color = Color(0.05, 0.06, 0.08, 0.85)
-	st.set_corner_radius_all(int(PWR_H * 0.5))
-	_power_track.add_theme_stylebox_override("panel", st)
-	add_child(_power_track)
+func set_cancel_visible(v: bool) -> void:
+	_cancel_btn.visible = v
 
-	_power_fill = Panel.new()
-	_power_fill.position = Vector2(3, 3)
-	_power_fill.size = Vector2(0, PWR_H - 6)
-	var sf := StyleBoxFlat.new()
-	sf.bg_color = Color(1, 1, 1)
-	sf.set_corner_radius_all(int((PWR_H - 6) * 0.5))
-	_power_fill.add_theme_stylebox_override("panel", sf)
-	_power_track.add_child(_power_fill)
-	_power_track.hide()
+
+func _make_power_bar() -> void:
+	_power_meter = PowerMeter.new()
+	_power_meter.size = Vector2(PWRV_W, PWRV_H)
+	_power_meter.custom_minimum_size = _power_meter.size
+	add_child(_power_meter)
+	_power_meter.hide()
 
 
 func set_power(power: float) -> void:
-	_power_track.show()
-	_power_fill.size.x = (PWR_W - 6.0) * clampf(power, 0.0, 1.0)
-	_power_fill.modulate = Color(0.4, 0.85, 0.35).lerp(Color(0.96, 0.35, 0.2), power)
+	_power_meter.show()
+	_power_meter.set_value(power)
 
 
 func clear_power() -> void:
-	_power_track.hide()
+	_power_meter.hide()
 
 
-## Position everything from the actual viewport size.
-func layout(vp: Vector2) -> void:
+## Position everything from the viewport size. `gutter_left`/`gutter_right` are
+## the x of the table's outer wood edges, so side widgets stay off the felt.
+func layout(vp: Vector2, gutter_left: float = -1.0, gutter_right: float = -1.0) -> void:
 	var w := vp.x
 	var h := vp.y
-	_cards[0]["panel"].position = Vector2(40, 26)
-	_cards[1]["panel"].position = Vector2(w - 40 - CARD_W, 26)
-	_pill.position = Vector2(w * 0.5 - PILL_W * 0.5, 38)
-	_pause.position = Vector2(w - 40 - _pause.size.x, 26 + CARD_H + 14)
+	if gutter_left < 0.0:
+		gutter_left = w * 0.14
+	if gutter_right < 0.0:
+		gutter_right = w * 0.86
+	# Top band: left card, then right card + pause tucked in the top-right corner
+	# (pause no longer hangs down onto the table).
+	_cards[0]["panel"].position = Vector2(34, 22)
+	_pause.position = Vector2(w - 34 - _pause.size.x, 22)
+	_cards[1]["panel"].position = Vector2(w - 34 - _pause.size.x - 12 - CARD_W, 22)
+	_pill.position = Vector2(w * 0.5 - PILL_W * 0.5, 20)
+	_timer.position = Vector2(w * 0.5 - _timer.size.x * 0.5, 88)
 	_mode.position = Vector2(w - 60 - _mode.size.x, h - 46)
 	_hint.position = Vector2(w * 0.5 - _hint.size.x * 0.5, h - 46)
 	_flash.position = Vector2(w * 0.5 - _flash.size.x * 0.5, 150)
-	_timer.position = Vector2(w * 0.5 - _timer.size.x * 0.5, 112)
-	_power_track.position = Vector2(w * 0.5 - PWR_W * 0.5, h - 74)
+	# Power meter + spin selector live in the LEFT gutter, kept off the felt.
+	var pm_x := clampf((gutter_left - PWRV_W) * 0.5, 6.0, maxf(6.0, gutter_left - PWRV_W - 6.0))
+	_power_meter.position = Vector2(pm_x, h * 0.40 - PWRV_H * 0.5)
+	var sp_x := clampf((gutter_left - spin.size.x) * 0.5, 6.0, maxf(6.0, gutter_left - spin.size.x - 6.0))
+	spin.position = Vector2(sp_x, h - 34.0 - spin.size.y)
 	_shoot_btn.position = Vector2(w - 44 - _shoot_btn.size.x, h - 44 - _shoot_btn.size.y)
-	spin.position = Vector2(44, h - 44 - spin.size.y)
+	_cancel_btn.position = Vector2(_shoot_btn.position.x - 16 - _cancel_btn.size.x, h - 44 - _cancel_btn.size.y)
 
 
 func _build_styles() -> void:
@@ -151,8 +176,8 @@ func _build_styles() -> void:
 	_style_active.set_corner_radius_all(20)
 	_style_active.set_border_width_all(3)
 	_style_active.border_color = ACCENT
-	_style_active.shadow_color = Color(0, 0, 0, 0.35)
-	_style_active.shadow_size = 8
+	_style_active.shadow_color = Color(ACCENT.r, ACCENT.g, ACCENT.b, 0.30)   # gold glow
+	_style_active.shadow_size = 12
 	_style_idle = StyleBoxFlat.new()
 	_style_idle.bg_color = Color(0.09, 0.10, 0.13, 0.78)
 	_style_idle.set_corner_radius_all(20)
@@ -226,7 +251,13 @@ func _make_center_pill() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	center.add_child(row)
-	_on_dot = _mini_label(row, "●", 30, Color(1, 1, 1))
+	_on_ball = BallPreview.new()
+	_on_ball.custom_minimum_size = Vector2(42, 42)
+	_on_ball.style = "classic"
+	_on_ball.lift = 0.0                         # dead-centre next to the text
+	_on_ball.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_on_ball.base = ON_COLORS["RED"]
+	row.add_child(_on_ball)
 	_on_text = _mini_label(row, "RED", 26, TEXT_BRIGHT)
 	_sep = _mini_label(row, "•", 24, TEXT_DIM)
 	_break = _mini_label(row, "", 24, ACCENT)
@@ -288,8 +319,14 @@ func refresh(turn: TurnManager, on_ball: String = "") -> void:
 		_pill.hide()
 		return
 	_pill.show()
-	_on_dot.add_theme_color_override("font_color", ON_COLORS.get(on_ball, Color(1, 1, 1)))
-	_on_text.text = on_ball
+	if on_ball == "COLOUR":
+		_on_ball.multi = true            # "any colour" — pot any colour after a red
+		_on_text.text = "ANY COLOUR"
+	else:
+		_on_ball.multi = false
+		_on_ball.base = ON_COLORS.get(on_ball, Color(1, 1, 1))
+		_on_text.text = on_ball
+	_on_ball.queue_redraw()
 	if turn.break_score > 0:
 		_sep.show()
 		_break.show()
