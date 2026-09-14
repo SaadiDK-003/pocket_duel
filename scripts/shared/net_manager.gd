@@ -54,6 +54,7 @@ func host_game(pname: String) -> bool:
 	is_host = true
 	is_networked = true
 	my_index = 0
+	print("[Net] Hosting on port %d. This machine's IP(s): %s" % [GAME_PORT, ", ".join(local_ips())])
 	_bcast = PacketPeerUDP.new()
 	_bcast.set_broadcast_enabled(true)
 	_bcast.set_dest_address("255.255.255.255", DISCOVERY_PORT)
@@ -67,6 +68,7 @@ func _on_peer_connected(id: int) -> void:
 	if _bcast:
 		_bcast.close()
 		_bcast = null
+	print("[Net] Guest joined (peer %d)." % id)
 	player_connected.emit(id)
 
 
@@ -91,8 +93,18 @@ func stop_discovery() -> void:
 		_listen = null
 
 
+## Non-loopback IPv4 addresses of this machine (for display / manual connect).
+func local_ips() -> Array:
+	var out: Array = []
+	for a in IP.get_local_addresses():
+		if a.count(".") == 3 and not a.begins_with("127."):
+			out.append(a)
+	return out
+
+
 func join(ip: String, port: int) -> bool:
 	stop_discovery()
+	print("[Net] Connecting to %s:%d ..." % [ip, port])
 	peer = ENetMultiplayerPeer.new()
 	if peer.create_client(ip, port) != OK:
 		peer = null
@@ -109,10 +121,12 @@ func join(ip: String, port: int) -> bool:
 
 
 func _on_connected_to_server() -> void:
+	print("[Net] Connected to host!")
 	server_connected.emit()
 
 
 func _on_connection_failed() -> void:
+	print("[Net] Connection failed (firewall or AP isolation?).")
 	connection_failed.emit()
 	_reset_peer()
 

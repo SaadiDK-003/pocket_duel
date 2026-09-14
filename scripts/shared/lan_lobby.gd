@@ -119,6 +119,9 @@ func _build() -> void:
 	match _state:
 		"hosting":
 			_label(vb, "Hosting — waiting for a player to join…", 30, ACCENT, HORIZONTAL_ALIGNMENT_CENTER)
+			var ips: Array = Net.local_ips()
+			if not ips.is_empty():
+				_label(vb, "Your IP: %s" % ", ".join(ips), 24, TEXT_DIM, HORIZONTAL_ALIGNMENT_CENTER)
 			_spacer(vb, 6)
 			_button(vb, "Cancel", func(): Net.leave(); _state = "browse"; Net.start_discovery(); _build(), false)
 		"connecting":
@@ -131,12 +134,27 @@ func _build() -> void:
 			_label(vb, "NEARBY GAMES", 24, TEXT_DIM, HORIZONTAL_ALIGNMENT_LEFT)
 			var hosts: Array = Net._hosts.values()
 			if hosts.is_empty():
-				_label(vb, "Searching…  (make sure the other phone is hosting)", 22, TEXT_DIM, HORIZONTAL_ALIGNMENT_CENTER)
+				_label(vb, "Searching…  (the other device must be hosting)", 22, TEXT_DIM, HORIZONTAL_ALIGNMENT_CENTER)
 			for h in hosts:
 				_host_row(vb, h)
 			if _status != "":
 				_spacer(vb, 4)
 				_label(vb, _status, 22, Color(1, 0.6, 0.5), HORIZONTAL_ALIGNMENT_CENTER)
+			# Manual IP fallback (for tricky networks / debugging).
+			_spacer(vb, 8)
+			_label(vb, "OR ENTER HOST IP", 24, TEXT_DIM, HORIZONTAL_ALIGNMENT_LEFT)
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 10)
+			var ip_field := LineEdit.new()
+			ip_field.placeholder_text = "192.168.x.x"
+			ip_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			ip_field.custom_minimum_size = Vector2(0, 66)
+			ip_field.add_theme_font_size_override("font_size", 28)
+			row.add_child(ip_field)
+			var cbtn := _button(row, "Connect", func(): _manual_connect(ip_field.text), false)
+			cbtn.size_flags_horizontal = Control.SIZE_SHRINK_END
+			cbtn.custom_minimum_size = Vector2(180, 66)
+			vb.add_child(row)
 
 	_spacer(vb, 10)
 	_button(vb, "Back", close, false)
@@ -150,6 +168,30 @@ func _host() -> void:
 	else:
 		_status = "Couldn't host (port busy?)."
 	_build()
+
+
+func _manual_connect(ip: String) -> void:
+	ip = ip.strip_edges()
+	if ip == "":
+		return
+	Audio.play("ui_click")
+	if Net.join(ip, Net.GAME_PORT):
+		_state = "connecting"
+		_start_connect_timeout()
+	else:
+		_status = "Couldn't start connection."
+	_build()
+
+
+## Don't spin on "Connecting…" forever — give up after 8s with a hint.
+func _start_connect_timeout() -> void:
+	await get_tree().create_timer(8.0).timeout
+	if _state == "connecting":
+		Net.leave()
+		_state = "browse"
+		_status = "Couldn't connect. Same WiFi? Try disabling the firewall / router 'AP isolation'."
+		Net.start_discovery()
+		_build()
 
 
 func _host_row(parent: Node, h: Dictionary) -> void:
@@ -169,6 +211,7 @@ func _host_row(parent: Node, h: Dictionary) -> void:
 		Net.opponent_name = str(h["name"])
 		if Net.join(str(h["ip"]), int(h["port"])):
 			_state = "connecting"
+			_start_connect_timeout()
 		else:
 			_status = "Couldn't connect."
 		_build())
