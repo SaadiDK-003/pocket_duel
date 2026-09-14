@@ -18,6 +18,7 @@ var _modal: Control
 var _settings: SettingsPanel
 var _shop: ShopPanel
 var _achievements: AchievementsPanel
+var _lan: LanLobby
 var _coins: Label
 
 
@@ -57,6 +58,7 @@ func _build() -> void:
 	_spacer(vb, 22)
 	_button(vb, "PLAY WITH HUMAN", func(): _show_prematch(false), true)
 	_button(vb, "PLAY WITH BOT", func(): _show_prematch(true), false)
+	_button(vb, "PLAY OVER WIFI", _show_lan, false)
 	_spacer(vb, 6)
 	# Secondary actions in a compact 2-column grid so the menu stays short.
 	var r1 := _row(vb)
@@ -302,6 +304,19 @@ func _show_settings() -> void:
 		_settings = SettingsPanel.new()
 		add_child(_settings)
 	_settings.open()
+
+
+func _show_lan() -> void:
+	if not is_instance_valid(_lan):
+		_lan = LanLobby.new()
+		add_child(_lan)
+		_lan.start_match.connect(_on_lan_start)
+	_lan.open()
+
+
+func _on_lan_start(is_host: bool) -> void:
+	# Stage 1: connection established. The live synced match is wired next.
+	_toast_show("Connected! %s" % ("You are the host." if is_host else "Joined the host."))
 
 
 func _show_achievements() -> void:
