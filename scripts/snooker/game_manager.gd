@@ -463,6 +463,7 @@ func _spawn(type: int, value: int, color: Color, pos: Vector2) -> Ball:
 	add_child(b)
 	b.style = GameState.ball_style()
 	b.setup(type, value, color, pos, ball_radius)
+	b.sunk.connect(_on_ball_sunk)
 	balls.append(b)
 	return b
 
@@ -872,14 +873,22 @@ func _pot_ball(b: Ball, pocket_pos: Vector2) -> void:
 		_potted_this_shot.append(b)
 		Audio.play("pocket")
 		_vibrate(35)
-		_pot_sparkle(pocket_pos, b.color)
-		_add_shake(2.5)
+		if GameState.shake_enabled:
+			_add_shake(2.5)
+		# The sparkle fires when the ball FINISHES sinking (b.sunk), so you see
+		# the drop first, then the splash.
 
 
 ## Screen shake: nudge the table root (background & HUD are separate layers, so
 ## they don't move). Only ever runs while balls are in motion.
 func _add_shake(amount: float) -> void:
 	_shake_amt = maxf(_shake_amt, amount)
+
+
+## A ball finished its sink animation — pop the sparkle now (after the drop).
+func _on_ball_sunk(pos: Vector2, col: Color) -> void:
+	if GameState.sparkle_enabled:
+		_pot_sparkle(pos, col)
 
 
 func _update_shake(delta: float) -> void:

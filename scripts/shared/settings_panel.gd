@@ -74,6 +74,10 @@ func _build() -> void:
 		func(on): GameState.vibration_enabled = on; GameState.save_settings())
 	_toggle_row(vb, "Tap to Shoot", GameState.tap_to_shoot,
 		func(on): GameState.tap_to_shoot = on; GameState.save_settings())
+	_toggle_row(vb, "Screen Shake", GameState.shake_enabled,
+		func(on): GameState.shake_enabled = on; GameState.save_settings())
+	_toggle_row(vb, "Pot Sparkle", GameState.sparkle_enabled,
+		func(on): GameState.sparkle_enabled = on; GameState.save_settings())
 	_spacer(vb, 6)
 
 	var timer_values := [0, 30, 20, 15]
