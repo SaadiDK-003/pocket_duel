@@ -15,10 +15,13 @@ extends RefCounted
 
 var difficulty: int = 1                       # 0 Easy, 1 Medium, 2 Hard.
 
-const AIM_ERROR := [0.115, 0.050, 0.020]      # radians of aim wobble.
-const POWER_JITTER := [[0.84, 1.16], [0.93, 1.08], [0.97, 1.04]]
+const AIM_ERROR := [0.115, 0.045, 0.008]      # radians of aim wobble (Hard barely misses).
+const POWER_JITTER := [[0.84, 1.16], [0.93, 1.07], [0.98, 1.03]]
 const SCRATCH_PEN := [0.6, 1.9, 4.2]          # penalty for an in-off risk.
-const CUT_MIN := 0.18                          # thinnest cut attempted.
+const CUT_MIN := 0.18                          # thinnest cut geometrically attempted.
+# If the BEST available pot's makeability is below this, play safe instead of
+# hacking at a low-percentage shot (0 = always attempt, like a beginner).
+const MAKE_MIN := [0.0, 0.20, 0.32]
 
 
 func choose_shot(game) -> Dictionary:
@@ -36,6 +39,9 @@ func choose_shot(game) -> Dictionary:
 
 	if not cands.is_empty():
 		cands.sort_custom(func(a, b): return a["score"] > b["score"])
+		# Better players decline a low-percentage pot and play safe instead.
+		if float(cands[0].get("make", 1.0)) < MAKE_MIN[d]:
+			return _safety(game, cue, targets, d)
 		var idx := 0
 		if d == 0:
 			idx = randi() % mini(cands.size(), 4)          # Easy: any of the top few.
@@ -96,7 +102,12 @@ func _eval_pot(game, cue: Ball, target: Ball, pocket: Vector2, radius: float, ta
 
 	var need := aim_dist + tp_dist
 	var power := clampf(need / 1700.0 / maxf(cut, 0.3), 0.22, 1.0)
-	var score := cut * 2.0 - need / 2200.0 + target.value * 0.08
+
+	# Makeability (0..1): straight AND short pots are easy; thin/long ones are not.
+	# This is the dominant term, so the bot prefers high-percentage shots.
+	var dist_factor := clampf(1.0 - need / 2400.0, 0.12, 1.0)
+	var make := cut * cut * dist_factor          # square the cut so thin cuts drop off fast
+	var score := make * 3.0 + target.value * 0.05
 
 	# The cue ball leaves along the tangent (perpendicular to the line of centres).
 	var after := aim - aim.dot(pot_dir) * pot_dir
@@ -105,10 +116,12 @@ func _eval_pot(game, cue: Ball, target: Ball, pocket: Vector2, radius: float, ta
 		after = after.normalized()
 		if _scratch_risk(game, ghost, after, radius):
 			score -= SCRATCH_PEN[d]
-		if d == 2:
-			score += _position_bonus(contact_after(ghost, after, radius), after, target, targets)
+		# Position is only a tie-breaker among already-makeable shots (× make),
+		# so the bot never picks a hard pot just for shape.
+		if d == 2 and make > 0.30:
+			score += _position_bonus(contact_after(ghost, after, radius), after, target, targets) * make
 
-	return {"dir": aim, "power": power, "score": score, "follow": follow}
+	return {"dir": aim, "power": power, "score": score, "follow": follow, "make": make}
 
 
 func contact_after(ghost: Vector2, after: Vector2, radius: float) -> Vector2:
