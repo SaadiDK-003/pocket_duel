@@ -88,6 +88,12 @@ var _last_vp: Vector2 = Vector2.ZERO
 var _confetti: CanvasLayer = null
 var _shake_amt: float = 0.0          # Current screen-shake magnitude (px).
 var _base_pos: Vector2 = Vector2.ZERO
+# --- LAN networking ---
+var _net: bool = false               # networked match?
+var _net_host: bool = false          # this instance is the host (authority)?
+var _my: int = 0                     # my player index (0 host, 1 guest)
+var _net_push_t: float = 0.0
+const NET_HZ: float = 30.0           # state broadcasts per second (host)
 var _timer_active: bool = false
 var _shot_time_left: float = 0.0
 var _last_tick_sec: int = -1
@@ -96,6 +102,11 @@ var _last_tick_sec: int = -1
 func _process(delta: float) -> void:
 	_simulate(delta)
 	_update_shake(delta)
+	if _net and _net_host:
+		_net_push_t -= delta
+		if _net_push_t <= 0.0:
+			_net_push_t = 1.0 / NET_HZ
+			_net_broadcast_state()
 	if _timer_active and not _paused:
 		_shot_time_left -= delta
 		if _shot_time_left <= 0.0:
@@ -111,6 +122,8 @@ func _process(delta: float) -> void:
 
 ## Start the per-shot countdown for a human turn (no-op if disabled or bot turn).
 func _start_shot_timer() -> void:
+	if _net:
+		return                       # shot timer is disabled in LAN matches
 	if GameState.shot_timer > 0 and is_human_turn() and not _frame_over and not _match_over:
 		_shot_time_left = float(GameState.shot_timer)
 		_last_tick_sec = -1
@@ -140,6 +153,12 @@ func _on_shot_timeout() -> void:
 
 
 func _ready() -> void:
+	_net = Net.is_networked
+	_net_host = Net.is_host
+	_my = Net.my_index
+	if _net:
+		GameState.vs_ai = false
+		Net.link_lost.connect(_on_net_link_lost)
 	_build_background()
 	table = Table.new()
 	add_child(table)
@@ -263,6 +282,8 @@ func _begin_frame() -> void:
 		_schedule_ai()
 	else:
 		_start_shot_timer()
+	if _net_host:
+		_net_begin.rpc()
 
 
 func _cancel_ai() -> void:
@@ -335,6 +356,8 @@ func _restart_frame() -> void:
 func _quit_to_menu() -> void:
 	_cancel_ai()
 	_stop_celebrate()
+	if _net:
+		Net.leave()
 	get_tree().change_scene_to_file(MENU_SCENE)
 
 
@@ -488,11 +511,16 @@ func can_shoot() -> bool:
 
 
 func _is_ai_turn() -> bool:
+	if _net:
+		return false
 	return GameState.vs_ai and turn.current == 1 and not _frame_over
 
 
-## The human controls the cue only on their own turn (blocks aiming for the bot).
+## The human controls the cue only on their own turn (blocks aiming for the bot
+## and, in a LAN match, for the opponent).
 func is_human_turn() -> bool:
+	if _net:
+		return turn.current == _my
 	return not _is_ai_turn()
 
 
@@ -552,9 +580,125 @@ func clamp_to_d(pos: Vector2) -> Vector2:
 func place_cue_ball(pos: Vector2) -> void:
 	if not is_ball_in_hand():
 		return
-	cue_ball.position = clamp_to_d(pos)
+	var p := clamp_to_d(pos)
+	cue_ball.position = p
 	cue_ball.queue_redraw()
 	cue.queue_redraw()
+	if _net and not _net_host:
+		_net_place.rpc_id(1, p)     # tell the host where I placed it
+
+
+# ------------------------------------------------------------------ LAN networking
+## The cue calls this to take a shot. Host shoots locally; guest sends it to the
+## host, which is the authority for the simulation.
+func player_shoot(dir: Vector2, power: float) -> void:
+	if not can_shoot() or not is_human_turn():
+		return
+	var s := hud.spin.get_spin()
+	hud.spin.reset()
+	if _net and not _net_host:
+		_net_shoot.rpc_id(1, dir, power, s.x, s.y)
+	else:
+		shoot(dir, power, s.x, s.y, false)
+
+
+## Host -> guest: full table + game state, ~30x/sec.
+func _net_broadcast_state() -> void:
+	var pos := PackedVector2Array()
+	var pot := PackedByteArray()
+	for b in balls:
+		pos.append(b.position)
+		pot.append(1 if b.is_potted else 0)
+	_net_state.rpc({
+		"pos": pos, "pot": pot,
+		"cur": turn.current, "sc": [turn.scores[0], turn.scores[1]],
+		"fr": [turn.frames_won[0], turn.frames_won[1]], "brk": turn.break_score,
+		"on": rules.on_ball_text(), "bih": _ball_in_hand, "mov": _balls_moving,
+		"nm": [str(turn.names[0]), str(turn.names[1])],
+	})
+
+
+@rpc("authority", "call_remote", "unreliable_ordered")
+func _net_state(p: Dictionary) -> void:
+	if _net_host:
+		return
+	var pos = p["pos"]
+	var pot = p["pot"]
+	for i in range(mini(balls.size(), pos.size())):
+		var b := balls[i]
+		b.is_potted = pot[i] == 1
+		b.visible = not b.is_potted
+		b.position = pos[i]
+		b.queue_redraw()
+	turn.current = int(p["cur"])
+	turn.scores[0] = int(p["sc"][0]); turn.scores[1] = int(p["sc"][1])
+	turn.frames_won[0] = int(p["fr"][0]); turn.frames_won[1] = int(p["fr"][1])
+	turn.break_score = int(p["brk"])
+	turn.names = [str(p["nm"][0]), str(p["nm"][1])]
+	_balls_moving = bool(p["mov"])
+	_ball_in_hand = bool(p["bih"])
+	hud.refresh(turn, str(p["on"]))
+	hud.spin.visible = is_human_turn() and not _balls_moving
+	cue.queue_redraw()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _net_shoot(dir: Vector2, power: float, side: float, follow: float) -> void:
+	if not _net_host or turn.current != 1 or not can_shoot():
+		return
+	shoot(dir, power, side, follow, false)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _net_place(pos: Vector2) -> void:
+	if not _net_host or turn.current != 1 or not _ball_in_hand:
+		return
+	cue_ball.position = clamp_to_d(pos)
+
+
+## Host -> guest: the frame/match result overlay.
+@rpc("authority", "call_remote", "reliable")
+func _net_result(title: String, subtitle: String, is_match: bool) -> void:
+	if _net_host:
+		return
+	var buttons: Array = []
+	if is_match:
+		buttons = [{"text": "New Match", "callable": _net_ask_restart}, {"text": "Main Menu", "callable": _quit_to_menu}]
+	else:
+		buttons = [{"text": "Next Frame", "callable": _net_ask_next}, {"text": "Main Menu", "callable": _quit_to_menu}]
+	overlay.show_menu(title, buttons, subtitle)
+
+
+func _net_ask_next() -> void:
+	_net_next.rpc_id(1)
+
+
+func _net_ask_restart() -> void:
+	_net_restart.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _net_next() -> void:
+	if _net_host:
+		_next_frame()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _net_restart() -> void:
+	if _net_host:
+		_restart_frame()
+
+
+## Host -> guest: a new frame started; drop the overlay (state sync fills the rest).
+@rpc("authority", "call_remote", "reliable")
+func _net_begin() -> void:
+	if not _net_host:
+		overlay.hide_menu()
+
+
+func _on_net_link_lost() -> void:
+	Net.leave()
+	get_tree().change_scene_to_file(MENU_SCENE)
 
 
 # ------------------------------------------------------------------ Simulation
@@ -562,6 +706,8 @@ func place_cue_ball(pos: Vector2) -> void:
 ## refresh rate. Framerate-independent: the integrator is dt-based and the
 ## substep count adapts to keep each substep near SIM_SUB_DT.
 func _simulate(delta: float) -> void:
+	if _net and not _net_host:
+		return                       # the guest renders host state; it never simulates
 	if _paused or not _balls_moving:
 		return
 
@@ -773,6 +919,8 @@ func _end_frame(forced_winner: int = -1) -> void:
 				{"text": "Main Menu", "callable": _quit_to_menu},
 			],
 			subtitle)
+		if _net_host:
+			_net_result.rpc("🏆  %s WINS!" % turn.names[winner], subtitle, true)
 	else:
 		GameState.add_coins(10)             # Coins for winning a frame.
 		var vp := get_viewport().get_visible_rect().size
@@ -792,6 +940,8 @@ func _end_frame(forced_winner: int = -1) -> void:
 				{"text": "Main Menu", "callable": _quit_to_menu},
 			],
 			subtitle)
+		if _net_host:
+			_net_result.rpc("%s wins the frame" % turn.names[winner], subtitle, false)
 
 
 ## Confetti burst over the whole screen for a match win.

@@ -89,7 +89,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					game.hud.set_cancel_visible(true)
 				else:
 					game.hud.clear_power()   # Release-to-fire mode.
-					game.shoot(a["dir"], a["power"])
+					game.player_shoot(a["dir"], a["power"])
 		queue_redraw()
 	elif event is InputEventMouseMotion:
 		if _placing:
@@ -111,7 +111,7 @@ func request_fire() -> void:
 	game.hud.set_cancel_visible(false)
 	game.hud.clear_power()
 	queue_redraw()
-	game.shoot(d, p)     # reads spin from the widget
+	game.player_shoot(d, p)     # reads spin; routes to the host in a LAN match
 
 
 func _cancel() -> void:

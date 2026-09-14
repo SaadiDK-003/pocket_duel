@@ -56,12 +56,14 @@ func _on_hosts_updated(_hosts: Array) -> void:
 func _on_player_connected(_id: int) -> void:
 	# Host: a guest joined -> begin the match as host.
 	_state = "connected"
+	_build()
 	start_match.emit(true)
 
 
 func _on_server_connected() -> void:
 	# Guest: connected -> begin the match as guest.
 	_state = "connected"
+	_build()
 	start_match.emit(false)
 
 

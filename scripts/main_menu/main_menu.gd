@@ -315,8 +315,14 @@ func _show_lan() -> void:
 
 
 func _on_lan_start(is_host: bool) -> void:
-	# Stage 1: connection established. The live synced match is wired next.
-	_toast_show("Connected! %s" % ("You are the host." if is_host else "Joined the host."))
+	# Both players connected — start the networked match.
+	GameState.vs_ai = false
+	GameState.mode = "Classic"
+	if is_host:
+		GameState.names = [Net.host_name, "Guest"]
+	else:
+		GameState.names = [Net.opponent_name, "You"]
+	get_tree().change_scene_to_file(GAME_SCENE)
 
 
 func _show_achievements() -> void:
