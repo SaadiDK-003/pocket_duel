@@ -97,7 +97,9 @@ var _net_targets: PackedVector2Array = PackedVector2Array()   # guest: positions
 var _hello_sent: bool = false        # guest sent its name to the host?
 var _last_turn: int = -1             # for the "your turn" cue
 var _aim_send_t: int = 0             # throttle for live aim streaming
-const NET_HZ: float = 60.0           # state broadcasts per second (host)
+var _place_send_t: int = 0           # throttle for ball-in-hand placement
+var _last_hud_sig: String = ""       # guest: only refresh the HUD when it changes
+const NET_HZ: float = 35.0           # state broadcasts per second while moving
 const NET_LERP: float = 30.0         # guest position smoothing rate
 const NET_SNAP: float = 220.0        # jump farther than this -> snap (re-rack/respot)
 var _timer_active: bool = false
@@ -111,7 +113,8 @@ func _process(delta: float) -> void:
 	if _net and _net_host:
 		_net_push_t -= delta
 		if _net_push_t <= 0.0:
-			_net_push_t = 1.0 / NET_HZ
+			# Stream fast while balls move (interpolation smooths it); idle is slow.
+			_net_push_t = (1.0 / NET_HZ) if _balls_moving else (1.0 / 8.0)
 			_net_broadcast_state()
 	elif _net and _net_targets.size() > 0:
 		_net_interpolate(delta)     # guest: glide balls toward the latest snapshot
@@ -597,7 +600,10 @@ func place_cue_ball(pos: Vector2) -> void:
 	cue_ball.queue_redraw()
 	cue.queue_redraw()
 	if _net and not _net_host:
-		_net_place.rpc_id(1, p)     # tell the host where I placed it
+		var now := Time.get_ticks_msec()
+		if now - _place_send_t >= 40:   # throttle ~25Hz (unreliable)
+			_place_send_t = now
+			_net_place.rpc_id(1, p)     # tell the host where I placed it
 
 
 # ------------------------------------------------------------------ LAN networking
@@ -651,7 +657,11 @@ func _net_state(p: Dictionary) -> void:
 	turn.names = [str(p["nm"][0]), str(p["nm"][1])]
 	_balls_moving = bool(p["mov"])
 	_ball_in_hand = bool(p["bih"])
-	hud.refresh(turn, str(p["on"]))
+	# Only rebuild the HUD when something actually changed (not every packet).
+	var sig := "%d|%d|%d|%d|%d|%d|%s|%s|%s" % [turn.current, turn.scores[0], turn.scores[1], turn.frames_won[0], turn.frames_won[1], turn.break_score, str(p["on"]), str(turn.names[0]), str(turn.names[1])]
+	if sig != _last_hud_sig:
+		_last_hud_sig = sig
+		hud.refresh(turn, str(p["on"]))
 	hud.spin.visible = is_human_turn() and not _balls_moving
 	cue.queue_redraw()
 	if not _hello_sent:                 # tell the host my name (host is ready now)
@@ -682,7 +692,7 @@ func _net_shoot(dir: Vector2, power: float, side: float, follow: float) -> void:
 	shoot(dir, power, side, follow, false)
 
 
-@rpc("any_peer", "call_remote", "reliable")
+@rpc("any_peer", "call_remote", "unreliable_ordered")
 func _net_place(pos: Vector2) -> void:
 	if not _net_host or turn.current != 1 or not _ball_in_hand:
 		return
