@@ -321,7 +321,7 @@ func _on_lan_start(is_host: bool) -> void:
 	if is_host:
 		GameState.names = [Net.host_name, "Guest"]
 	else:
-		GameState.names = [Net.opponent_name, "You"]
+		GameState.names = [Net.opponent_name, Net.my_name]
 	get_tree().change_scene_to_file(GAME_SCENE)
 
 

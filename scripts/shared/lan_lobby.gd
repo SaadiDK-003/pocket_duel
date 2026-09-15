@@ -36,6 +36,8 @@ func _ready() -> void:
 func open() -> void:
 	_state = "browse"
 	_status = ""
+	if Net.my_name == "Player" and GameState.names.size() > 0 and str(GameState.names[0]) != "Player 1":
+		Net.my_name = str(GameState.names[0])
 	Net.start_discovery()
 	_build()
 	visible = true
@@ -131,6 +133,20 @@ func _build() -> void:
 		"connected":
 			_label(vb, "Connected! Starting…", 30, GREEN, HORIZONTAL_ALIGNMENT_CENTER)
 		_:
+			# Your name (advertised when hosting, sent to the host when joining).
+			var nrow := HBoxContainer.new()
+			nrow.add_theme_constant_override("separation", 10)
+			_label(nrow, "NAME", 24, TEXT_DIM, HORIZONTAL_ALIGNMENT_LEFT)
+			var nf := LineEdit.new()
+			nf.text = Net.my_name
+			nf.max_length = 14
+			nf.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			nf.custom_minimum_size = Vector2(0, 60)
+			nf.add_theme_font_size_override("font_size", 28)
+			nf.text_changed.connect(func(t): Net.my_name = t.strip_edges() if t.strip_edges() != "" else "Player")
+			nrow.add_child(nf)
+			vb.add_child(nrow)
+			_spacer(vb, 6)
 			_button(vb, "HOST A GAME", _host, true)
 			_spacer(vb, 8)
 			_label(vb, "NEARBY GAMES", 24, TEXT_DIM, HORIZONTAL_ALIGNMENT_LEFT)
@@ -164,8 +180,7 @@ func _build() -> void:
 
 func _host() -> void:
 	Audio.play("ui_click")
-	var pname: String = str(GameState.names[0]) if GameState.names.size() > 0 else "Player"
-	if Net.host_game(pname):
+	if Net.host_game(Net.my_name):
 		_state = "hosting"
 	else:
 		_status = "Couldn't host (port busy?)."

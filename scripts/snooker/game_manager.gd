@@ -94,6 +94,9 @@ var _net_host: bool = false          # this instance is the host (authority)?
 var _my: int = 0                     # my player index (0 host, 1 guest)
 var _net_push_t: float = 0.0
 var _net_targets: PackedVector2Array = PackedVector2Array()   # guest: positions to glide to
+var _hello_sent: bool = false        # guest sent its name to the host?
+var _last_turn: int = -1             # for the "your turn" cue
+var _aim_send_t: int = 0             # throttle for live aim streaming
 const NET_HZ: float = 60.0           # state broadcasts per second (host)
 const NET_LERP: float = 30.0         # guest position smoothing rate
 const NET_SNAP: float = 220.0        # jump farther than this -> snap (re-rack/respot)
@@ -112,6 +115,8 @@ func _process(delta: float) -> void:
 			_net_broadcast_state()
 	elif _net and _net_targets.size() > 0:
 		_net_interpolate(delta)     # guest: glide balls toward the latest snapshot
+	if _net:
+		_check_turn_cue()
 	if _timer_active and not _paused:
 		_shot_time_left -= delta
 		if _shot_time_left <= 0.0:
@@ -178,6 +183,8 @@ func _ready() -> void:
 	hud.pause_requested.connect(_toggle_pause)
 	hud.shoot_pressed.connect(cue.request_fire)
 	hud.cancel_pressed.connect(cue._cancel)
+	hud.emoji_selected.connect(_on_emoji_selected)
+	hud.enable_emojis(_net)
 	get_viewport().size_changed.connect(_on_resize)
 	_base_pos = position
 	_layout()
@@ -647,6 +654,9 @@ func _net_state(p: Dictionary) -> void:
 	hud.refresh(turn, str(p["on"]))
 	hud.spin.visible = is_human_turn() and not _balls_moving
 	cue.queue_redraw()
+	if not _hello_sent:                 # tell the host my name (host is ready now)
+		_hello_sent = true
+		_net_hello.rpc_id(1, Net.my_name)
 
 
 ## Guest: glide each ball toward its latest target so motion is smooth between
@@ -722,6 +732,60 @@ func _net_begin() -> void:
 func _on_net_link_lost() -> void:
 	Net.leave()
 	get_tree().change_scene_to_file(MENU_SCENE)
+
+
+## Guest -> host: my player name.
+@rpc("any_peer", "call_remote", "reliable")
+func _net_hello(name: String) -> void:
+	if _net_host:
+		turn.names[1] = name if name.strip_edges() != "" else "Guest"
+
+
+## Flash "YOUR TURN" / "OPPONENT'S TURN" with a cue when the turn flips.
+func _check_turn_cue() -> void:
+	if _frame_over or _match_over or _balls_moving:
+		return
+	if turn.current == _last_turn:
+		return
+	_last_turn = turn.current
+	if turn.current == _my:
+		hud.flash("YOUR TURN", Color(0.4, 0.9, 0.5))
+		Audio.play("ui_click", 2.0)
+	else:
+		hud.flash("%s's turn…" % str(turn.names[turn.current]), Color(0.7, 0.85, 1.0))
+
+
+# --- Live opponent aim ---
+func net_send_aim(dir: Vector2, power: float) -> void:
+	if not _net:
+		return
+	var now := Time.get_ticks_msec()
+	if now - _aim_send_t < 40:       # ~25 Hz
+		return
+	_aim_send_t = now
+	_net_aim.rpc(dir, power, true)
+
+
+func net_send_aim_off() -> void:
+	if _net:
+		_net_aim.rpc(Vector2.ZERO, 0.0, false)
+
+
+@rpc("any_peer", "call_remote", "unreliable_ordered")
+func _net_aim(dir: Vector2, power: float, active: bool) -> void:
+	cue.set_remote_aim(dir, power, active)
+
+
+# --- Emojis / reactions ---
+func _on_emoji_selected(idx: int) -> void:
+	hud.show_emoji(idx, _my)
+	if _net:
+		_net_emoji.rpc(idx, _my)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _net_emoji(idx: int, sender: int) -> void:
+	hud.show_emoji(idx, sender)
 
 
 # ------------------------------------------------------------------ Simulation

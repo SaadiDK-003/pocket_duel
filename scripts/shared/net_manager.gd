@@ -24,6 +24,7 @@ var is_host: bool = false
 var is_networked: bool = false
 var peer: ENetMultiplayerPeer = null
 var host_name: String = "Player"
+var my_name: String = "Player"        # this device's player name
 var host_ip: String = ""              # the host's chosen LAN IP (advertised)
 var my_index: int = 0                # 0 = host (player 1), 1 = guest (player 2).
 var opponent_name: String = "Opponent"

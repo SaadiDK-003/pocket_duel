@@ -27,6 +27,11 @@ var _shot_power: float = 0.0
 var _drag_start: Vector2 = Vector2.ZERO   # Where the aim drag began.
 var _pointer: Vector2 = Vector2.ZERO      # Current pointer position (world space).
 
+# Opponent's live aim (LAN) — drawn on our screen while they line up.
+var _remote_active: bool = false
+var _remote_dir: Vector2 = Vector2.ZERO
+var _remote_power: float = 0.0
+
 const AIM_RANGE: float = 300.0       # Distance from the ball for 100% power.
 const DEAD_ZONE: float = 14.0        # Below this the aim/shot is ignored.
 const MAX_RAY: float = 4000.0        # Fallback aim-line length if nothing hit.
@@ -87,8 +92,10 @@ func _unhandled_input(event: InputEvent) -> void:
 					game.hud.set_power(_shot_power)
 					game.hud.set_shoot_visible(true)
 					game.hud.set_cancel_visible(true)
+					game.net_send_aim(a["dir"], a["power"])   # opponent sees the locked aim
 				else:
 					game.hud.clear_power()   # Release-to-fire mode.
+					game.net_send_aim_off()
 					game.player_shoot(a["dir"], a["power"])
 		queue_redraw()
 	elif event is InputEventMouseMotion:
@@ -97,6 +104,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif _aiming:
 			_pointer = get_global_mouse_position()
 			_update_power()
+			var a: Dictionary = _aim()
+			if a["dist"] >= DEAD_ZONE:
+				game.net_send_aim(a["dir"], a["power"])   # stream live aim to opponent
 			queue_redraw()
 
 
@@ -111,6 +121,7 @@ func request_fire() -> void:
 	game.hud.set_cancel_visible(false)
 	game.hud.clear_power()
 	queue_redraw()
+	game.net_send_aim_off()
 	game.player_shoot(d, p)     # reads spin; routes to the host in a LAN match
 
 
@@ -122,6 +133,7 @@ func _cancel() -> void:
 		game.hud.clear_power()
 		game.hud.set_shoot_visible(false)
 		game.hud.set_cancel_visible(false)
+		game.net_send_aim_off()
 	queue_redraw()
 
 
@@ -146,10 +158,23 @@ func _aim() -> Dictionary:
 
 
 # ------------------------------------------------------------------ Drawing
+func set_remote_aim(dir: Vector2, power: float, active: bool) -> void:
+	_remote_active = active
+	_remote_dir = dir
+	_remote_power = power
+	queue_redraw()
+
+
 func _draw() -> void:
-	if cue_ball == null or cue_ball.is_potted:
+	if cue_ball == null or cue_ball.is_potted or game == null:
 		return
-	if game == null or not game.can_shoot() or not game.is_human_turn():
+	# In a LAN match, on the opponent's turn draw THEIR live aim (streamed).
+	if game._net and not game.is_human_turn():
+		if _remote_active and game.can_shoot() and _remote_dir != Vector2.ZERO:
+			_draw_prediction(cue_ball.position, _remote_dir)
+			_draw_cue_stick(cue_ball.position, _remote_dir, _remote_power)
+		return
+	if not game.can_shoot() or not game.is_human_turn():
 		return
 
 	# Ball-in-hand affordance.
