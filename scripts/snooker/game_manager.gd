@@ -93,7 +93,10 @@ var _net: bool = false               # networked match?
 var _net_host: bool = false          # this instance is the host (authority)?
 var _my: int = 0                     # my player index (0 host, 1 guest)
 var _net_push_t: float = 0.0
-const NET_HZ: float = 30.0           # state broadcasts per second (host)
+var _net_targets: PackedVector2Array = PackedVector2Array()   # guest: positions to glide to
+const NET_HZ: float = 60.0           # state broadcasts per second (host)
+const NET_LERP: float = 30.0         # guest position smoothing rate
+const NET_SNAP: float = 220.0        # jump farther than this -> snap (re-rack/respot)
 var _timer_active: bool = false
 var _shot_time_left: float = 0.0
 var _last_tick_sec: int = -1
@@ -107,6 +110,8 @@ func _process(delta: float) -> void:
 		if _net_push_t <= 0.0:
 			_net_push_t = 1.0 / NET_HZ
 			_net_broadcast_state()
+	elif _net and _net_targets.size() > 0:
+		_net_interpolate(delta)     # guest: glide balls toward the latest snapshot
 	if _timer_active and not _paused:
 		_shot_time_left -= delta
 		if _shot_time_left <= 0.0:
@@ -624,11 +629,13 @@ func _net_state(p: Dictionary) -> void:
 		return
 	var pos = p["pos"]
 	var pot = p["pot"]
+	_net_targets = pos
 	for i in range(mini(balls.size(), pos.size())):
 		var b := balls[i]
 		b.is_potted = pot[i] == 1
 		b.visible = not b.is_potted
-		b.position = pos[i]
+		if b.is_potted:
+			b.position = pos[i]        # potted balls are hidden; snap them
 		b.queue_redraw()
 	turn.current = int(p["cur"])
 	turn.scores[0] = int(p["sc"][0]); turn.scores[1] = int(p["sc"][1])
@@ -640,6 +647,22 @@ func _net_state(p: Dictionary) -> void:
 	hud.refresh(turn, str(p["on"]))
 	hud.spin.visible = is_human_turn() and not _balls_moving
 	cue.queue_redraw()
+
+
+## Guest: glide each ball toward its latest target so motion is smooth between
+## snapshots (big jumps — a re-rack or respot — snap instead of sliding).
+func _net_interpolate(delta: float) -> void:
+	var t := clampf(delta * NET_LERP, 0.0, 1.0)
+	for i in range(mini(balls.size(), _net_targets.size())):
+		var b := balls[i]
+		if b.is_potted:
+			continue
+		var target: Vector2 = _net_targets[i]
+		if b.position.distance_to(target) > NET_SNAP:
+			b.position = target
+		else:
+			b.position = b.position.lerp(target, t)
+		b.queue_redraw()
 
 
 @rpc("any_peer", "call_remote", "reliable")
