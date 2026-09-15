@@ -1204,6 +1204,8 @@ func _pot_ball(b: Ball, pocket_pos: Vector2) -> void:
 ## Screen shake: nudge the table root (background & HUD are separate layers, so
 ## they don't move). Only ever runs while balls are in motion.
 func _add_shake(amount: float) -> void:
+	if not GameState.shake_enabled:
+		return
 	_shake_amt = maxf(_shake_amt, amount)
 
 

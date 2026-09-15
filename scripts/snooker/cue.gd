@@ -232,8 +232,16 @@ func _draw_prediction(origin: Vector2, dir: Vector2) -> void:
 			draw_line(contact, contact + deflect * 72.0, Color(0.45, 0.85, 1.0, 0.7), 2.5, true)
 	elif hit["type"] == "cushion":
 		var nrm: Vector2 = hit["normal"]
-		var refl: Vector2 = dir - 2.0 * dir.dot(nrm) * nrm
-		draw_line(contact, contact + refl * 120.0, Color(1, 1, 1, 0.4), 2.0, true)
+		var refl: Vector2 = (dir - 2.0 * dir.dot(nrm) * nrm).normalized()
+		# Cast the post-bounce path so a bank shot shows where the ball really goes.
+		var hit2: Dictionary = _cast(contact + refl * 2.0, refl, [cue_ball])
+		var c2: Vector2 = hit2["point"]
+		draw_line(contact, c2, Color(1, 1, 1, 0.5), 2.0, true)
+		if hit2["type"] == "ball":
+			var t2: Ball = hit2["target"]
+			draw_arc(c2, r, 0.0, TAU, 40, Color(1, 1, 1, 0.35), 2.0, true)   # ghost at the bank contact
+			var n2: Vector2 = (t2.position - c2).normalized()
+			draw_line(t2.position, t2.position + n2 * 90.0, Color(1.0, 0.82, 0.25, 0.7), 2.5, true)
 
 
 ## Manual dashed line (draw_dashed_line can intermittently drop the whole line).
