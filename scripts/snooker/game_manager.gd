@@ -93,15 +93,16 @@ var _net: bool = false               # networked match?
 var _net_host: bool = false          # this instance is the host (authority)?
 var _my: int = 0                     # my player index (0 host, 1 guest)
 var _net_push_t: float = 0.0
-var _net_targets: PackedVector2Array = PackedVector2Array()   # guest: positions to glide to
+var _snap_buf: Array = []            # guest: buffered snapshots {t, pos} for interpolation
+var _latest_t: int = 0               # guest: newest snapshot host-time
 var _hello_sent: bool = false        # guest sent its name to the host?
 var _last_turn: int = -1             # for the "your turn" cue
 var _aim_send_t: int = 0             # throttle for live aim streaming
 var _place_send_t: int = 0           # throttle for ball-in-hand placement
 var _last_hud_sig: String = ""       # guest: only refresh the HUD when it changes
 const NET_HZ: float = 35.0           # state broadcasts per second while moving
-const NET_LERP: float = 30.0         # guest position smoothing rate
 const NET_SNAP: float = 220.0        # jump farther than this -> snap (re-rack/respot)
+const NET_DELAY_MS: float = 90.0     # guest renders this far in the past (jitter buffer)
 var _timer_active: bool = false
 var _shot_time_left: float = 0.0
 var _last_tick_sec: int = -1
@@ -116,8 +117,8 @@ func _process(delta: float) -> void:
 			# Stream fast while balls move (interpolation smooths it); idle is slow.
 			_net_push_t = (1.0 / NET_HZ) if _balls_moving else (1.0 / 8.0)
 			_net_broadcast_state()
-	elif _net and _net_targets.size() > 0:
-		_net_interpolate(delta)     # guest: glide balls toward the latest snapshot
+	elif _net and _snap_buf.size() > 0:
+		_net_interp_buffer()        # guest: interpolate between buffered snapshots
 	if _net:
 		_check_turn_cue()
 	if _timer_active and not _paused:
@@ -628,6 +629,7 @@ func _net_broadcast_state() -> void:
 		pos.append(b.position)
 		pot.append(1 if b.is_potted else 0)
 	_net_state.rpc({
+		"t": Time.get_ticks_msec(),
 		"pos": pos, "pot": pot,
 		"cur": turn.current, "sc": [turn.scores[0], turn.scores[1]],
 		"fr": [turn.frames_won[0], turn.frames_won[1]], "brk": turn.break_score,
@@ -642,13 +644,18 @@ func _net_state(p: Dictionary) -> void:
 		return
 	var pos = p["pos"]
 	var pot = p["pot"]
-	_net_targets = pos
-	for i in range(mini(balls.size(), pos.size())):
+	# Buffer this snapshot (by host time) for delayed interpolation.
+	_latest_t = int(p.get("t", _latest_t + 16))
+	_snap_buf.append({"t": _latest_t, "pos": pos})
+	while _snap_buf.size() > 20:
+		_snap_buf.pop_front()
+	# Potted / visibility apply from the newest snapshot immediately.
+	for i in range(mini(balls.size(), pot.size())):
 		var b := balls[i]
 		b.is_potted = pot[i] == 1
 		b.visible = not b.is_potted
 		if b.is_potted:
-			b.position = pos[i]        # potted balls are hidden; snap them
+			b.position = pos[i]
 		b.queue_redraw()
 	turn.current = int(p["cur"])
 	turn.scores[0] = int(p["sc"][0]); turn.scores[1] = int(p["sc"][1])
@@ -669,20 +676,34 @@ func _net_state(p: Dictionary) -> void:
 		_net_hello.rpc_id(1, Net.my_name)
 
 
-## Guest: glide each ball toward its latest target so motion is smooth between
-## snapshots (big jumps — a re-rack or respot — snap instead of sliding).
-func _net_interpolate(delta: float) -> void:
-	var t := clampf(delta * NET_LERP, 0.0, 1.0)
-	for i in range(mini(balls.size(), _net_targets.size())):
-		var b := balls[i]
-		if b.is_potted:
+## Guest: render ~NET_DELAY_MS in the past, interpolating between the two buffered
+## snapshots that bracket that time. Absorbs network jitter -> smooth motion.
+func _net_interp_buffer() -> void:
+	var render_t := float(_latest_t) - NET_DELAY_MS
+	var a: Dictionary = _snap_buf[0]
+	var b: Dictionary = _snap_buf[_snap_buf.size() - 1]
+	for s in _snap_buf:
+		if float(s["t"]) <= render_t:
+			a = s
+		if float(s["t"]) >= render_t:
+			b = s
+			break
+	var apos = a["pos"]
+	var bpos = b["pos"]
+	var denom := float(b["t"]) - float(a["t"])
+	var f := 0.0 if denom <= 0.0 else clampf((render_t - float(a["t"])) / denom, 0.0, 1.0)
+	var n := mini(balls.size(), mini(apos.size(), bpos.size()))
+	for i in range(n):
+		var ball := balls[i]
+		if ball.is_potted:
 			continue
-		var target: Vector2 = _net_targets[i]
-		if b.position.distance_to(target) > NET_SNAP:
-			b.position = target
+		var pa: Vector2 = apos[i]
+		var pb: Vector2 = bpos[i]
+		if pa.distance_to(pb) > NET_SNAP:
+			ball.position = pb          # teleport (re-rack/respot) — don't slide
 		else:
-			b.position = b.position.lerp(target, t)
-		b.queue_redraw()
+			ball.position = pa.lerp(pb, f)
+		ball.queue_redraw()
 
 
 @rpc("any_peer", "call_remote", "reliable")
