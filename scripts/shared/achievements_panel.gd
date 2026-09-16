@@ -92,13 +92,20 @@ func _build() -> void:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.custom_minimum_size = Vector2(content_w, clampf(vp.y * 0.52, 340.0, 660.0))
 	vb.add_child(scroll)
+	# A right margin keeps the rows clear of the scrollbar.
+	var pad := MarginContainer.new()
+	pad.add_theme_constant_override("margin_right", 26)
+	pad.add_theme_constant_override("margin_left", 4)
+	pad.mouse_filter = Control.MOUSE_FILTER_PASS    # don't block touch-drag scrolling
+	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(pad)
 	var grid := GridContainer.new()
 	grid.columns = cols
 	grid.add_theme_constant_override("h_separation", 14)
 	grid.add_theme_constant_override("v_separation", 12)
 	grid.mouse_filter = Control.MOUSE_FILTER_PASS   # let touch-drag reach the scroller
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(grid)
+	pad.add_child(grid)
 	for id in Achievements.ORDER:
 		_row(grid, id, Achievements.LIST[id])
 
