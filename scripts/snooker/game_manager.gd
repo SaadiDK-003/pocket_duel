@@ -100,12 +100,18 @@ var _last_turn: int = -1             # for the "your turn" cue
 var _aim_send_t: int = 0             # throttle for live aim streaming
 var _place_send_t: int = 0           # throttle for ball-in-hand placement
 var _last_hud_sig: String = ""       # guest: only refresh the HUD when it changes
+var _ping_ms: int = 0                # measured round-trip time (LAN)
+var _ping_send_t: float = 0.0
+var _fps_t: float = 0.0
+var _fps_shown: bool = false
 const NET_HZ: float = 35.0           # state broadcasts per second while moving
 const NET_SNAP: float = 220.0        # jump farther than this -> snap (re-rack/respot)
 const NET_DELAY_MS: float = 90.0     # guest renders this far in the past (jitter buffer)
 var _timer_active: bool = false
 var _shot_time_left: float = 0.0
 var _last_tick_sec: int = -1
+# --- Pro rules: free ball ---
+var _pending_free_ball: bool = false      # a foul just happened; check for a free ball
 
 
 func _process(delta: float) -> void:
@@ -121,6 +127,19 @@ func _process(delta: float) -> void:
 		_net_interp_buffer()        # guest: interpolate between buffered snapshots
 	if _net:
 		_check_turn_cue()
+		_ping_send_t -= delta
+		if _ping_send_t <= 0.0:
+			_ping_send_t = 1.0
+			_net_ping.rpc(Time.get_ticks_msec())
+	if GameState.show_fps:
+		_fps_shown = true
+		_fps_t -= delta
+		if _fps_t <= 0.0:
+			_fps_t = 0.25
+			hud.set_debug(Engine.get_frames_per_second(), _ping_ms if _net else -1)
+	elif _fps_shown:
+		_fps_shown = false
+		hud.set_debug(-1, -1)
 	if _timer_active and not _paused:
 		_shot_time_left -= delta
 		if _shot_time_left <= 0.0:
@@ -286,6 +305,7 @@ func _begin_frame() -> void:
 	_break_shot = true              # The first shot of the frame scatters the pack.
 	_potted_this_shot.clear()
 	_first_contact = null
+	_pending_free_ball = false
 	_undo_stack.clear()             # Undo is scoped to the current frame.
 	overlay.hide_menu()
 	hud.set_mode(mode_name)
@@ -442,12 +462,14 @@ func _apply_snapshot(snap: Dictionary) -> void:
 	rules.phase = snap["phase"]
 	rules.next_colour = snap["next_colour"]
 	rules.frame_complete = false
+	rules.free_ball = false
 	_frame_starter = snap["starter"]
 	_balls_moving = false
 	_frame_over = false
 	_paused = false
 	_ball_in_hand = false
 	_first_contact = null
+	_pending_free_ball = false
 	_potted_this_shot.clear()
 	overlay.hide_menu()
 	hud.refresh(turn, rules.on_ball_text())
@@ -819,6 +841,17 @@ func _net_emoji(idx: int, sender: int) -> void:
 	hud.show_emoji(idx, sender)
 
 
+# --- Ping (round-trip time) ---
+@rpc("any_peer", "call_remote", "unreliable")
+func _net_ping(t: int) -> void:
+	_net_pong.rpc_id(multiplayer.get_remote_sender_id(), t)
+
+
+@rpc("any_peer", "call_remote", "unreliable")
+func _net_pong(t: int) -> void:
+	_ping_ms = Time.get_ticks_msec() - t
+
+
 # ------------------------------------------------------------------ Simulation
 ## Advance the table once per rendered frame so motion tracks the display's
 ## refresh rate. Framerate-independent: the integrator is dt-based and the
@@ -860,15 +893,95 @@ func _simulate(delta: float) -> void:
 		if _frame_over:
 			_end_frame()
 		else:
-			hud.refresh(turn, rules.on_ball_text())
-			hud.spin.visible = is_human_turn()
-			if _ball_in_hand and is_human_turn():
-				hud.flash("BALL IN HAND  —  DRAG THE CUE BALL", Color(0.6, 0.85, 1.0))
-			if _is_ai_turn():
-				_schedule_ai()
-			else:
-				_start_shot_timer()
+			# Pro rules: award a free ball if the incoming player is snookered.
+			if _pending_free_ball and _is_snookered(turn.current):
+				rules.free_ball = true
+				hud.flash("FREE BALL", Color(0.5, 0.95, 0.7))
+			_pending_free_ball = false
+			_resume_after_turn()
 		cue.queue_redraw()   # Re-show the aim guide now that control returns.
+
+
+## Hand control back to whoever is on strike: refresh the HUD, show the spin
+## widget on a human turn, and start the bot's think or the shot clock.
+func _resume_after_turn() -> void:
+	hud.refresh(turn, rules.on_ball_text())
+	hud.spin.visible = is_human_turn()
+	if _ball_in_hand and is_human_turn():
+		hud.flash("BALL IN HAND  —  DRAG THE CUE BALL", Color(0.6, 0.85, 1.0))
+	if _is_ai_turn():
+		_schedule_ai()
+	else:
+		_start_shot_timer()
+
+
+# ---------------------------------------------------------------- Snooker detection
+## Is the player on strike snookered on every ball that is "on"? Used to award a
+## free ball under pro rules. Conservative: a ball on counts as reachable if the
+## cue ball has a clear path to its centre or either extreme edge.
+func _is_snookered(_player: int) -> bool:
+	if cue_ball == null or cue_ball.is_potted:
+		return false
+	var ons := _balls_on()
+	if ons.is_empty():
+		return false
+	for target in ons:
+		if _can_hit(target):
+			return false
+	return true
+
+
+## The balls that are legal to hit first, given the current rules state.
+func _balls_on() -> Array:
+	var out: Array = []
+	for b in balls:
+		if b.is_potted or b == cue_ball:
+			continue
+		if rules.phase == RulesManager.Phase.COLOURS:
+			if b.value == rules.next_colour:
+				out.append(b)
+		elif rules.on_red:
+			if b.type == Ball.BallType.RED:
+				out.append(b)
+		else:
+			if b.type != Ball.BallType.RED:
+				out.append(b)
+	return out
+
+
+func _can_hit(target: Ball) -> bool:
+	var c := cue_ball.position
+	var d := target.position - c
+	var dist := d.length()
+	if dist < 0.001:
+		return true
+	var dir := d / dist
+	var perp := Vector2(-dir.y, dir.x)
+	for sgn in [0.0, 0.9, -0.9]:
+		if _path_clear(c, target.position + perp * (target.radius * sgn), target):
+			return true
+	return false
+
+
+## Straight-line path from `from` to `to` free of any ball other than the target?
+func _path_clear(from: Vector2, to: Vector2, target: Ball) -> bool:
+	var seg := to - from
+	var seglen := seg.length()
+	if seglen < 0.001:
+		return true
+	var dir := seg / seglen
+	var nrm := Vector2(-dir.y, dir.x)
+	var clearance := ball_radius * 2.0 - 1.0
+	for o in balls:
+		if o == cue_ball or o == target or o.is_potted:
+			continue
+		var rel := o.position - from
+		var proj := rel.dot(dir)
+		if proj <= 0.0 or proj >= seglen:
+			continue                     # obstacle isn't between the two points
+		if absf(rel.dot(nrm)) < clearance:
+			return false
+	return true
 
 
 ## Play at most one ball-hit and one cushion sound per frame, scaled by how hard
@@ -913,6 +1026,10 @@ func _evaluate_shot() -> void:
 		turn.switch_turn()
 		hud.flash("FOUL  +%d" % res["foul_value"], Color(1.0, 0.5, 0.4))
 		_vibrate(60)
+		# Pro rules: after the balls settle, award the incoming player a free ball
+		# if they've been left snookered (checked once positions are final).
+		if GameState.pro_rules:
+			_pending_free_ball = true
 	else:
 		if res["score"] > 0:
 			var before_break := turn.break_score
@@ -1082,6 +1199,8 @@ func _confetti_tex() -> ImageTexture:
 
 ## Full-screen confetti rain — for a match win.
 func _celebrate() -> void:
+	if GameState.low_graphics:
+		return
 	_stop_celebrate()
 	_confetti = CanvasLayer.new()
 	_confetti.layer = 20                 # Above the match-complete overlay.
@@ -1111,6 +1230,8 @@ func _celebrate() -> void:
 
 ## A one-shot party-popper burst from `center` — for a frame win or a big break.
 func _confetti_burst(center: Vector2, amount: int) -> void:
+	if GameState.low_graphics:
+		return
 	var cl := CanvasLayer.new()
 	cl.layer = 20
 	add_child(cl)
@@ -1204,7 +1325,7 @@ func _pot_ball(b: Ball, pocket_pos: Vector2) -> void:
 ## Screen shake: nudge the table root (background & HUD are separate layers, so
 ## they don't move). Only ever runs while balls are in motion.
 func _add_shake(amount: float) -> void:
-	if not GameState.shake_enabled:
+	if not GameState.shake_enabled or GameState.low_graphics:
 		return
 	_shake_amt = maxf(_shake_amt, amount)
 
@@ -1225,6 +1346,8 @@ func _update_shake(delta: float) -> void:
 
 ## A quick particle burst in the ball's colour when it drops — pot "juice".
 func _pot_sparkle(pos: Vector2, col: Color) -> void:
+	if GameState.low_graphics:
+		return
 	var p := CPUParticles2D.new()
 	p.position = pos
 	p.z_index = 60
