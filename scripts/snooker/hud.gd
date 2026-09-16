@@ -9,6 +9,9 @@ extends CanvasLayer
 signal pause_requested
 signal shoot_pressed
 signal cancel_pressed
+signal emoji_selected(idx)
+
+const EMOJIS: Array[String] = ["👍", "😂", "😮", "🎯", "😤", "😎"]
 
 const ACCENT: Color = Color(0.98, 0.78, 0.28)
 const TEXT_DIM: Color = Color(0.62, 0.67, 0.74)
@@ -46,6 +49,8 @@ var _timer: Label
 var _power_meter: PowerMeter
 var _shoot_btn: Button
 var _cancel_btn: Button
+var _emoji_btn: Button
+var _emoji_popup: PanelContainer
 
 
 func setup() -> void:
@@ -115,6 +120,94 @@ func setup() -> void:
 
 	spin = SpinSelector.new()
 	add_child(spin)
+	_make_emoji_ui()
+
+
+func _make_emoji_ui() -> void:
+	_emoji_btn = Button.new()
+	_emoji_btn.text = "🙂"
+	_emoji_btn.custom_minimum_size = Vector2(72, 72)
+	_emoji_btn.size = Vector2(72, 72)
+	_emoji_btn.add_theme_font_size_override("font_size", 38)
+	var st := StyleBoxFlat.new()
+	st.bg_color = Color(0.13, 0.16, 0.20, 0.92)
+	st.set_corner_radius_all(16)
+	st.set_border_width_all(2)
+	st.border_color = Color(1, 1, 1, 0.12)
+	_emoji_btn.add_theme_stylebox_override("normal", st)
+	_emoji_btn.add_theme_stylebox_override("hover", st)
+	_emoji_btn.add_theme_stylebox_override("pressed", st)
+	_emoji_btn.pressed.connect(_toggle_emoji_popup)
+	_emoji_btn.hide()
+	add_child(_emoji_btn)
+
+	_emoji_popup = PanelContainer.new()
+	var ps := StyleBoxFlat.new()
+	ps.bg_color = Color(0.11, 0.14, 0.17, 0.97)
+	ps.set_corner_radius_all(16)
+	ps.set_border_width_all(2)
+	ps.border_color = Color(1, 1, 1, 0.12)
+	ps.content_margin_left = 10; ps.content_margin_right = 10
+	ps.content_margin_top = 8; ps.content_margin_bottom = 8
+	_emoji_popup.add_theme_stylebox_override("panel", ps)
+	var erow := HBoxContainer.new()
+	erow.add_theme_constant_override("separation", 6)
+	_emoji_popup.add_child(erow)
+	for i in EMOJIS.size():
+		var e := Button.new()
+		e.text = EMOJIS[i]
+		e.custom_minimum_size = Vector2(66, 66)
+		e.add_theme_font_size_override("font_size", 34)
+		var es := StyleBoxFlat.new(); es.bg_color = Color(0.16, 0.19, 0.23); es.set_corner_radius_all(12)
+		e.add_theme_stylebox_override("normal", es)
+		e.add_theme_stylebox_override("hover", _lighter(es))
+		e.add_theme_stylebox_override("pressed", es)
+		var idx := i
+		e.pressed.connect(func(): Audio.play("ui_click"); _emoji_popup.hide(); emoji_selected.emit(idx))
+		erow.add_child(e)
+	_emoji_popup.hide()
+	add_child(_emoji_popup)
+
+
+func _lighter(s: StyleBoxFlat) -> StyleBoxFlat:
+	var d := s.duplicate()
+	d.bg_color = s.bg_color.lightened(0.1)
+	return d
+
+
+func _toggle_emoji_popup() -> void:
+	Audio.play("ui_click")
+	if _emoji_popup.visible:
+		_emoji_popup.hide()
+		return
+	_emoji_popup.reset_size()
+	_emoji_popup.position = Vector2(
+		_emoji_btn.position.x + _emoji_btn.size.x * 0.5 - _emoji_popup.size.x * 0.5,
+		_emoji_btn.position.y - 10 - _emoji_popup.size.y)
+	_emoji_popup.show()
+
+
+func enable_emojis(on: bool) -> void:
+	_emoji_btn.visible = on
+	if not on:
+		_emoji_popup.hide()
+
+
+## Float an emoji up from the given player's card (both screens see the same).
+func show_emoji(idx: int, player_index: int) -> void:
+	if idx < 0 or idx >= EMOJIS.size() or player_index < 0 or player_index >= _cards.size():
+		return
+	var lbl := Label.new()
+	lbl.text = EMOJIS[idx]
+	lbl.add_theme_font_size_override("font_size", 88)
+	var card: Panel = _cards[player_index]["panel"]
+	var start := card.position + Vector2(card.size.x * 0.5 - 44, card.size.y + 4)
+	lbl.position = start
+	add_child(lbl)
+	var tw := create_tween()
+	tw.tween_property(lbl, "position:y", start.y + 100.0, 1.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(lbl, "modulate:a", 0.0, 1.5).set_delay(0.4)
+	tw.tween_callback(lbl.queue_free)
 
 
 func set_shoot_visible(v: bool) -> void:
@@ -168,6 +261,7 @@ func layout(vp: Vector2, gutter_left: float = -1.0, gutter_right: float = -1.0) 
 	spin.position = Vector2(sp_x, h - 34.0 - spin.size.y)
 	_shoot_btn.position = Vector2(w - 44 - _shoot_btn.size.x, h - 44 - _shoot_btn.size.y)
 	_cancel_btn.position = Vector2(_shoot_btn.position.x - 16 - _cancel_btn.size.x, h - 44 - _cancel_btn.size.y)
+	_emoji_btn.position = Vector2(w * 0.5 - _emoji_btn.size.x * 0.5, h - 40 - _emoji_btn.size.y)
 
 
 func _build_styles() -> void:

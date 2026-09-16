@@ -10,6 +10,8 @@ extends Node2D
 
 enum BallType { CUE, RED, YELLOW, GREEN, BROWN, BLUE, PINK, BLACK }
 
+signal sunk(pos: Vector2, col: Color)   # emitted when the drop animation finishes
+
 # --- Physics state ---
 var velocity: Vector2 = Vector2.ZERO
 var radius: float = 18.0
@@ -81,6 +83,7 @@ func _process(delta: float) -> void:
 		return
 	_sink_t += delta
 	if _sink_t >= _sink_dur:
+		sunk.emit(position + _sink_target, color)   # drop finished -> splash now
 		_end_sink()
 		visible = false
 	queue_redraw()

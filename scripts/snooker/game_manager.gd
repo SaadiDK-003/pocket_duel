@@ -86,6 +86,23 @@ const MENU_SCENE: String = "res://scenes/main_menu/main_menu.tscn"
 
 var _last_vp: Vector2 = Vector2.ZERO
 var _confetti: CanvasLayer = null
+var _shake_amt: float = 0.0          # Current screen-shake magnitude (px).
+var _base_pos: Vector2 = Vector2.ZERO
+# --- LAN networking ---
+var _net: bool = false               # networked match?
+var _net_host: bool = false          # this instance is the host (authority)?
+var _my: int = 0                     # my player index (0 host, 1 guest)
+var _net_push_t: float = 0.0
+var _snap_buf: Array = []            # guest: buffered snapshots {t, pos} for interpolation
+var _latest_t: int = 0               # guest: newest snapshot host-time
+var _hello_sent: bool = false        # guest sent its name to the host?
+var _last_turn: int = -1             # for the "your turn" cue
+var _aim_send_t: int = 0             # throttle for live aim streaming
+var _place_send_t: int = 0           # throttle for ball-in-hand placement
+var _last_hud_sig: String = ""       # guest: only refresh the HUD when it changes
+const NET_HZ: float = 35.0           # state broadcasts per second while moving
+const NET_SNAP: float = 220.0        # jump farther than this -> snap (re-rack/respot)
+const NET_DELAY_MS: float = 90.0     # guest renders this far in the past (jitter buffer)
 var _timer_active: bool = false
 var _shot_time_left: float = 0.0
 var _last_tick_sec: int = -1
@@ -93,6 +110,17 @@ var _last_tick_sec: int = -1
 
 func _process(delta: float) -> void:
 	_simulate(delta)
+	_update_shake(delta)
+	if _net and _net_host:
+		_net_push_t -= delta
+		if _net_push_t <= 0.0:
+			# Stream fast while balls move (interpolation smooths it); idle is slow.
+			_net_push_t = (1.0 / NET_HZ) if _balls_moving else (1.0 / 8.0)
+			_net_broadcast_state()
+	elif _net and _snap_buf.size() > 0:
+		_net_interp_buffer()        # guest: interpolate between buffered snapshots
+	if _net:
+		_check_turn_cue()
 	if _timer_active and not _paused:
 		_shot_time_left -= delta
 		if _shot_time_left <= 0.0:
@@ -108,6 +136,8 @@ func _process(delta: float) -> void:
 
 ## Start the per-shot countdown for a human turn (no-op if disabled or bot turn).
 func _start_shot_timer() -> void:
+	if _net:
+		return                       # shot timer is disabled in LAN matches
 	if GameState.shot_timer > 0 and is_human_turn() and not _frame_over and not _match_over:
 		_shot_time_left = float(GameState.shot_timer)
 		_last_tick_sec = -1
@@ -137,6 +167,12 @@ func _on_shot_timeout() -> void:
 
 
 func _ready() -> void:
+	_net = Net.is_networked
+	_net_host = Net.is_host
+	_my = Net.my_index
+	if _net:
+		GameState.vs_ai = false
+		Net.link_lost.connect(_on_net_link_lost)
 	_build_background()
 	table = Table.new()
 	add_child(table)
@@ -151,7 +187,10 @@ func _ready() -> void:
 	hud.pause_requested.connect(_toggle_pause)
 	hud.shoot_pressed.connect(cue.request_fire)
 	hud.cancel_pressed.connect(cue._cancel)
+	hud.emoji_selected.connect(_on_emoji_selected)
+	hud.enable_emojis(_net)
 	get_viewport().size_changed.connect(_on_resize)
+	_base_pos = position
 	_layout()
 	_start_mode(GameState.mode)
 
@@ -259,6 +298,8 @@ func _begin_frame() -> void:
 		_schedule_ai()
 	else:
 		_start_shot_timer()
+	if _net_host:
+		_net_begin.rpc()
 
 
 func _cancel_ai() -> void:
@@ -331,6 +372,8 @@ func _restart_frame() -> void:
 func _quit_to_menu() -> void:
 	_cancel_ai()
 	_stop_celebrate()
+	if _net:
+		Net.leave()
 	get_tree().change_scene_to_file(MENU_SCENE)
 
 
@@ -459,6 +502,7 @@ func _spawn(type: int, value: int, color: Color, pos: Vector2) -> Ball:
 	add_child(b)
 	b.style = GameState.ball_style()
 	b.setup(type, value, color, pos, ball_radius)
+	b.sunk.connect(_on_ball_sunk)
 	balls.append(b)
 	return b
 
@@ -483,11 +527,16 @@ func can_shoot() -> bool:
 
 
 func _is_ai_turn() -> bool:
+	if _net:
+		return false
 	return GameState.vs_ai and turn.current == 1 and not _frame_over
 
 
-## The human controls the cue only on their own turn (blocks aiming for the bot).
+## The human controls the cue only on their own turn (blocks aiming for the bot
+## and, in a LAN match, for the opponent).
 func is_human_turn() -> bool:
+	if _net:
+		return turn.current == _my
 	return not _is_ai_turn()
 
 
@@ -547,9 +596,227 @@ func clamp_to_d(pos: Vector2) -> Vector2:
 func place_cue_ball(pos: Vector2) -> void:
 	if not is_ball_in_hand():
 		return
-	cue_ball.position = clamp_to_d(pos)
+	var p := clamp_to_d(pos)
+	cue_ball.position = p
 	cue_ball.queue_redraw()
 	cue.queue_redraw()
+	if _net and not _net_host:
+		var now := Time.get_ticks_msec()
+		if now - _place_send_t >= 40:   # throttle ~25Hz (unreliable)
+			_place_send_t = now
+			_net_place.rpc_id(1, p)     # tell the host where I placed it
+
+
+# ------------------------------------------------------------------ LAN networking
+## The cue calls this to take a shot. Host shoots locally; guest sends it to the
+## host, which is the authority for the simulation.
+func player_shoot(dir: Vector2, power: float) -> void:
+	if not can_shoot() or not is_human_turn():
+		return
+	var s := hud.spin.get_spin()
+	hud.spin.reset()
+	if _net and not _net_host:
+		_net_shoot.rpc_id(1, dir, power, s.x, s.y)
+	else:
+		shoot(dir, power, s.x, s.y, false)
+
+
+## Host -> guest: full table + game state, ~30x/sec.
+func _net_broadcast_state() -> void:
+	var pos := PackedVector2Array()
+	var pot := PackedByteArray()
+	for b in balls:
+		pos.append(b.position)
+		pot.append(1 if b.is_potted else 0)
+	_net_state.rpc({
+		"t": Time.get_ticks_msec(),
+		"pos": pos, "pot": pot,
+		"cur": turn.current, "sc": [turn.scores[0], turn.scores[1]],
+		"fr": [turn.frames_won[0], turn.frames_won[1]], "brk": turn.break_score,
+		"on": rules.on_ball_text(), "bih": _ball_in_hand, "mov": _balls_moving,
+		"nm": [str(turn.names[0]), str(turn.names[1])],
+	})
+
+
+@rpc("authority", "call_remote", "unreliable_ordered")
+func _net_state(p: Dictionary) -> void:
+	if _net_host:
+		return
+	var pos = p["pos"]
+	var pot = p["pot"]
+	# Buffer this snapshot (by host time) for delayed interpolation.
+	_latest_t = int(p.get("t", _latest_t + 16))
+	_snap_buf.append({"t": _latest_t, "pos": pos})
+	while _snap_buf.size() > 20:
+		_snap_buf.pop_front()
+	# Potted / visibility apply from the newest snapshot immediately.
+	for i in range(mini(balls.size(), pot.size())):
+		var b := balls[i]
+		b.is_potted = pot[i] == 1
+		b.visible = not b.is_potted
+		if b.is_potted:
+			b.position = pos[i]
+		b.queue_redraw()
+	turn.current = int(p["cur"])
+	turn.scores[0] = int(p["sc"][0]); turn.scores[1] = int(p["sc"][1])
+	turn.frames_won[0] = int(p["fr"][0]); turn.frames_won[1] = int(p["fr"][1])
+	turn.break_score = int(p["brk"])
+	turn.names = [str(p["nm"][0]), str(p["nm"][1])]
+	_balls_moving = bool(p["mov"])
+	_ball_in_hand = bool(p["bih"])
+	# Only rebuild the HUD when something actually changed (not every packet).
+	var sig := "%d|%d|%d|%d|%d|%d|%s|%s|%s" % [turn.current, turn.scores[0], turn.scores[1], turn.frames_won[0], turn.frames_won[1], turn.break_score, str(p["on"]), str(turn.names[0]), str(turn.names[1])]
+	if sig != _last_hud_sig:
+		_last_hud_sig = sig
+		hud.refresh(turn, str(p["on"]))
+	hud.spin.visible = is_human_turn() and not _balls_moving
+	cue.queue_redraw()
+	if not _hello_sent:                 # tell the host my name (host is ready now)
+		_hello_sent = true
+		_net_hello.rpc_id(1, Net.my_name)
+
+
+## Guest: render ~NET_DELAY_MS in the past, interpolating between the two buffered
+## snapshots that bracket that time. Absorbs network jitter -> smooth motion.
+func _net_interp_buffer() -> void:
+	var render_t := float(_latest_t) - NET_DELAY_MS
+	var a: Dictionary = _snap_buf[0]
+	var b: Dictionary = _snap_buf[_snap_buf.size() - 1]
+	for s in _snap_buf:
+		if float(s["t"]) <= render_t:
+			a = s
+		if float(s["t"]) >= render_t:
+			b = s
+			break
+	var apos = a["pos"]
+	var bpos = b["pos"]
+	var denom := float(b["t"]) - float(a["t"])
+	var f := 0.0 if denom <= 0.0 else clampf((render_t - float(a["t"])) / denom, 0.0, 1.0)
+	var n := mini(balls.size(), mini(apos.size(), bpos.size()))
+	for i in range(n):
+		var ball := balls[i]
+		if ball.is_potted:
+			continue
+		var pa: Vector2 = apos[i]
+		var pb: Vector2 = bpos[i]
+		if pa.distance_to(pb) > NET_SNAP:
+			ball.position = pb          # teleport (re-rack/respot) — don't slide
+		else:
+			ball.position = pa.lerp(pb, f)
+		ball.queue_redraw()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _net_shoot(dir: Vector2, power: float, side: float, follow: float) -> void:
+	if not _net_host or turn.current != 1 or not can_shoot():
+		return
+	shoot(dir, power, side, follow, false)
+
+
+@rpc("any_peer", "call_remote", "unreliable_ordered")
+func _net_place(pos: Vector2) -> void:
+	if not _net_host or turn.current != 1 or not _ball_in_hand:
+		return
+	cue_ball.position = clamp_to_d(pos)
+
+
+## Host -> guest: the frame/match result overlay.
+@rpc("authority", "call_remote", "reliable")
+func _net_result(title: String, subtitle: String, is_match: bool) -> void:
+	if _net_host:
+		return
+	var buttons: Array = []
+	if is_match:
+		buttons = [{"text": "New Match", "callable": _net_ask_restart}, {"text": "Main Menu", "callable": _quit_to_menu}]
+	else:
+		buttons = [{"text": "Next Frame", "callable": _net_ask_next}, {"text": "Main Menu", "callable": _quit_to_menu}]
+	overlay.show_menu(title, buttons, subtitle)
+
+
+func _net_ask_next() -> void:
+	_net_next.rpc_id(1)
+
+
+func _net_ask_restart() -> void:
+	_net_restart.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _net_next() -> void:
+	if _net_host:
+		_next_frame()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _net_restart() -> void:
+	if _net_host:
+		_restart_frame()
+
+
+## Host -> guest: a new frame started; drop the overlay (state sync fills the rest).
+@rpc("authority", "call_remote", "reliable")
+func _net_begin() -> void:
+	if not _net_host:
+		overlay.hide_menu()
+
+
+func _on_net_link_lost() -> void:
+	Net.leave()
+	get_tree().change_scene_to_file(MENU_SCENE)
+
+
+## Guest -> host: my player name.
+@rpc("any_peer", "call_remote", "reliable")
+func _net_hello(name: String) -> void:
+	if _net_host:
+		turn.names[1] = name if name.strip_edges() != "" else "Guest"
+
+
+## Flash "YOUR TURN" / "OPPONENT'S TURN" with a cue when the turn flips.
+func _check_turn_cue() -> void:
+	if _frame_over or _match_over or _balls_moving:
+		return
+	if turn.current == _last_turn:
+		return
+	_last_turn = turn.current
+	if turn.current == _my:
+		hud.flash("YOUR TURN", Color(0.4, 0.9, 0.5))
+		Audio.play("ui_click", 2.0)
+	else:
+		hud.flash("%s's turn…" % str(turn.names[turn.current]), Color(0.7, 0.85, 1.0))
+
+
+# --- Live opponent aim ---
+func net_send_aim(dir: Vector2, power: float) -> void:
+	if not _net:
+		return
+	var now := Time.get_ticks_msec()
+	if now - _aim_send_t < 40:       # ~25 Hz
+		return
+	_aim_send_t = now
+	_net_aim.rpc(dir, power, true)
+
+
+func net_send_aim_off() -> void:
+	if _net:
+		_net_aim.rpc(Vector2.ZERO, 0.0, false)
+
+
+@rpc("any_peer", "call_remote", "unreliable_ordered")
+func _net_aim(dir: Vector2, power: float, active: bool) -> void:
+	cue.set_remote_aim(dir, power, active)
+
+
+# --- Emojis / reactions ---
+func _on_emoji_selected(idx: int) -> void:
+	hud.show_emoji(idx, _my)
+	if _net:
+		_net_emoji.rpc(idx, _my)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _net_emoji(idx: int, sender: int) -> void:
+	hud.show_emoji(idx, sender)
 
 
 # ------------------------------------------------------------------ Simulation
@@ -557,6 +824,8 @@ func place_cue_ball(pos: Vector2) -> void:
 ## refresh rate. Framerate-independent: the integrator is dt-based and the
 ## substep count adapts to keep each substep near SIM_SUB_DT.
 func _simulate(delta: float) -> void:
+	if _net and not _net_host:
+		return                       # the guest renders host state; it never simulates
 	if _paused or not _balls_moving:
 		return
 
@@ -580,6 +849,8 @@ func _simulate(delta: float) -> void:
 
 	if not any_moving:
 		_balls_moving = false
+		_shake_amt = 0.0            # never leave the table offset when control returns
+		position = _base_pos
 		_evaluate_shot()
 		# In-off: bring the cue ball back into the D, in hand.
 		if cue_ball.is_potted:
@@ -608,8 +879,11 @@ func _play_impact_sounds() -> void:
 			# First real contact with the pack: play the scatter, once.
 			_break_shot = false
 			Audio.play("break", -2.0)
+			_add_shake(6.5)
+			_vibrate(55)
 		else:
 			Audio.play("ball_hit", _impact_db(_frame_ball_impact), 0.12)
+			_add_shake(clampf(_frame_ball_impact / 320.0, 0.0, 3.5))   # harder hit, bigger shake
 	if _frame_cushion_impact > 80.0:
 		Audio.play("cushion", _impact_db(_frame_cushion_impact), 0.10)
 
@@ -641,11 +915,17 @@ func _evaluate_shot() -> void:
 		_vibrate(60)
 	else:
 		if res["score"] > 0:
+			var before_break := turn.break_score
 			turn.add_score(res["score"])
 			hud.flash("+%d" % res["score"], Color(1.0, 0.9, 0.4))
 			# Milestone breaks unlock the instant they're reached.
 			for id in GameState.note_break(turn.break_score):
 				toast.show_id(id)
+			# Big-break flourish when the break crosses 50 / 100 this shot.
+			for m in [100, 50]:
+				if before_break < m and turn.break_score >= m:
+					_break_flourish(m)
+					break
 		if not res["keep_turn"]:
 			turn.switch_turn()
 			if res["score"] == 0:      # Clean miss/safety — announce the turn.
@@ -757,8 +1037,12 @@ func _end_frame(forced_winner: int = -1) -> void:
 				{"text": "Main Menu", "callable": _quit_to_menu},
 			],
 			subtitle)
+		if _net_host:
+			_net_result.rpc("🏆  %s WINS!" % turn.names[winner], subtitle, true)
 	else:
 		GameState.add_coins(10)             # Coins for winning a frame.
+		var vp := get_viewport().get_visible_rect().size
+		_confetti_burst(Vector2(vp.x * 0.5, vp.y * 0.62), 110)   # frame-win pop
 		var subtitle := "%d – %d   ·   match %d–%d   ·   +10 coins" % [
 			turn.scores[winner], turn.scores[1 - winner],
 			turn.frames_won[0], turn.frames_won[1]]
@@ -774,29 +1058,38 @@ func _end_frame(forced_winner: int = -1) -> void:
 				{"text": "Main Menu", "callable": _quit_to_menu},
 			],
 			subtitle)
+		if _net_host:
+			_net_result.rpc("%s wins the frame" % turn.names[winner], subtitle, false)
 
 
 ## Confetti burst over the whole screen for a match win.
-func _celebrate() -> void:
-	_stop_celebrate()
-	_confetti = CanvasLayer.new()
-	_confetti.layer = 20                 # Above the match-complete overlay.
-	add_child(_confetti)
-
-	var img := Image.create(12, 16, false, Image.FORMAT_RGBA8)
-	img.fill(Color.WHITE)
-	var tex := ImageTexture.create_from_image(img)
-
+## Confetti colour ramp + a small rectangle texture, shared by all celebrations.
+func _confetti_ramp() -> Gradient:
 	var ramp := Gradient.new()
 	ramp.set_color(0, Color(0.95, 0.25, 0.28))
 	ramp.add_point(0.25, Color(0.98, 0.78, 0.28))
 	ramp.add_point(0.5, Color(0.30, 0.80, 0.40))
 	ramp.add_point(0.75, Color(0.25, 0.55, 0.95))
 	ramp.set_color(1, Color(0.85, 0.40, 0.85))
+	return ramp
+
+
+func _confetti_tex() -> ImageTexture:
+	var img := Image.create(12, 16, false, Image.FORMAT_RGBA8)
+	img.fill(Color.WHITE)
+	return ImageTexture.create_from_image(img)
+
+
+## Full-screen confetti rain — for a match win.
+func _celebrate() -> void:
+	_stop_celebrate()
+	_confetti = CanvasLayer.new()
+	_confetti.layer = 20                 # Above the match-complete overlay.
+	add_child(_confetti)
 
 	var vp := get_viewport().get_visible_rect().size
 	var p := CPUParticles2D.new()
-	p.texture = tex
+	p.texture = _confetti_tex()
 	p.position = Vector2(vp.x * 0.5, -20.0)
 	p.amount = 240
 	p.lifetime = 4.5
@@ -812,14 +1105,53 @@ func _celebrate() -> void:
 	p.angular_velocity_max = 400.0
 	p.scale_amount_min = 0.6
 	p.scale_amount_max = 1.3
-	p.color_initial_ramp = ramp
+	p.color_initial_ramp = _confetti_ramp()
 	_confetti.add_child(p)
+
+
+## A one-shot party-popper burst from `center` — for a frame win or a big break.
+func _confetti_burst(center: Vector2, amount: int) -> void:
+	var cl := CanvasLayer.new()
+	cl.layer = 20
+	add_child(cl)
+	var p := CPUParticles2D.new()
+	p.texture = _confetti_tex()
+	p.position = center
+	p.one_shot = true
+	p.explosiveness = 0.92
+	p.amount = amount
+	p.lifetime = 2.2
+	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_POINT
+	p.direction = Vector2(0, -1)
+	p.spread = 60.0
+	p.gravity = Vector2(0, 660)
+	p.initial_velocity_min = 320.0
+	p.initial_velocity_max = 680.0
+	p.angular_velocity_min = -520.0
+	p.angular_velocity_max = 520.0
+	p.scale_amount_min = 0.6
+	p.scale_amount_max = 1.3
+	p.color_initial_ramp = _confetti_ramp()
+	cl.add_child(p)
+	p.emitting = true
+	p.finished.connect(cl.queue_free)
 
 
 func _stop_celebrate() -> void:
 	if is_instance_valid(_confetti):
 		_confetti.queue_free()
 	_confetti = null
+
+
+## A celebratory flash + confetti burst for a milestone break (50 / 100).
+func _break_flourish(value: int) -> void:
+	var vp := get_viewport().get_visible_rect().size
+	_confetti_burst(Vector2(vp.x * 0.5, vp.y * 0.44), 80)
+	Audio.play("achieve")
+	if value >= 100:
+		hud.flash("CENTURY BREAK!  %d" % value, Color(1.0, 0.85, 0.30))
+	else:
+		hud.flash("GREAT BREAK!  %d" % value, Color(0.55, 0.90, 1.0))
 
 
 func _step(dt: float) -> void:
@@ -862,7 +1194,60 @@ func _pot_ball(b: Ball, pocket_pos: Vector2) -> void:
 	if b not in _potted_this_shot:
 		_potted_this_shot.append(b)
 		Audio.play("pocket")
-		_vibrate(30)
+		_vibrate(35)
+		if GameState.shake_enabled:
+			_add_shake(2.5)
+		# The sparkle fires when the ball FINISHES sinking (b.sunk), so you see
+		# the drop first, then the splash.
+
+
+## Screen shake: nudge the table root (background & HUD are separate layers, so
+## they don't move). Only ever runs while balls are in motion.
+func _add_shake(amount: float) -> void:
+	if not GameState.shake_enabled:
+		return
+	_shake_amt = maxf(_shake_amt, amount)
+
+
+## A ball finished its sink animation — pop the sparkle now (after the drop).
+func _on_ball_sunk(pos: Vector2, col: Color) -> void:
+	if GameState.sparkle_enabled:
+		_pot_sparkle(pos, col)
+
+
+func _update_shake(delta: float) -> void:
+	if _shake_amt > 0.05:
+		position = _base_pos + Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * _shake_amt
+		_shake_amt = maxf(_shake_amt - 42.0 * delta, 0.0)
+	elif position != _base_pos:
+		position = _base_pos
+
+
+## A quick particle burst in the ball's colour when it drops — pot "juice".
+func _pot_sparkle(pos: Vector2, col: Color) -> void:
+	var p := CPUParticles2D.new()
+	p.position = pos
+	p.z_index = 60
+	p.one_shot = true
+	p.explosiveness = 1.0
+	p.amount = 20
+	p.lifetime = 0.55
+	p.emitting = true
+	p.spread = 180.0
+	p.initial_velocity_min = 150.0
+	p.initial_velocity_max = 360.0
+	p.gravity = Vector2.ZERO
+	p.damping_min = 200.0
+	p.damping_max = 340.0
+	p.scale_amount_min = maxf(ball_radius * 0.20, 3.5)
+	p.scale_amount_max = maxf(ball_radius * 0.38, 6.0)
+	p.color = col.lightened(0.35)
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(1, 1, 1, 1))
+	ramp.set_color(1, Color(col.r, col.g, col.b, 0.0))
+	p.color_ramp = ramp
+	add_child(p)
+	p.finished.connect(p.queue_free)
 
 
 func _resolve_ball_collisions() -> void:

@@ -24,6 +24,7 @@ config/icon="res://assets/icons/icon.png"
 
 GameState="*res://scripts/shared/game_state.gd"
 Audio="*res://scripts/shared/audio_manager.gd"
+Net="*res://scripts/shared/net_manager.gd"
 
 [display]
 
