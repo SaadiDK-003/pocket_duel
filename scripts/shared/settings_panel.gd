@@ -83,10 +83,18 @@ func _build() -> void:
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vb.add_child(scroll)
 
+	# A right margin keeps the toggles clear of the scrollbar (and a matching left
+	# one keeps the two columns visually centred).
+	var pad := MarginContainer.new()
+	pad.add_theme_constant_override("margin_right", 26)
+	pad.add_theme_constant_override("margin_left", 4)
+	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(pad)
+
 	var inner := VBoxContainer.new()
 	inner.add_theme_constant_override("separation", 12)
 	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(inner)
+	pad.add_child(inner)
 
 	var grid := GridContainer.new()
 	grid.columns = cols

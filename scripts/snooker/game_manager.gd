@@ -110,10 +110,8 @@ const NET_DELAY_MS: float = 90.0     # guest renders this far in the past (jitte
 var _timer_active: bool = false
 var _shot_time_left: float = 0.0
 var _last_tick_sec: int = -1
-# --- Pro rules: "play again after a foul" ---
-var _pending_foul_choice: bool = false   # a foul just happened; offer the choice
-var _foul_choice_active: bool = false     # the play/pass-back prompt is showing
-var _foul_prompt: CanvasLayer = null
+# --- Pro rules: free ball ---
+var _pending_free_ball: bool = false      # a foul just happened; check for a free ball
 
 
 func _process(delta: float) -> void:
@@ -307,9 +305,7 @@ func _begin_frame() -> void:
 	_break_shot = true              # The first shot of the frame scatters the pack.
 	_potted_this_shot.clear()
 	_first_contact = null
-	_pending_foul_choice = false
-	_foul_choice_active = false
-	_hide_foul_prompt()
+	_pending_free_ball = false
 	_undo_stack.clear()             # Undo is scoped to the current frame.
 	overlay.hide_menu()
 	hud.set_mode(mode_name)
@@ -473,9 +469,7 @@ func _apply_snapshot(snap: Dictionary) -> void:
 	_paused = false
 	_ball_in_hand = false
 	_first_contact = null
-	_pending_foul_choice = false
-	_foul_choice_active = false
-	_hide_foul_prompt()
+	_pending_free_ball = false
 	_potted_this_shot.clear()
 	overlay.hide_menu()
 	hud.refresh(turn, rules.on_ball_text())
@@ -551,7 +545,7 @@ func _build_hud() -> void:
 
 # ------------------------------------------------------------------ Shooting API
 func can_shoot() -> bool:
-	return not _balls_moving and not _frame_over and not _paused and not _foul_choice_active and cue_ball != null and not cue_ball.is_potted
+	return not _balls_moving and not _frame_over and not _paused and cue_ball != null and not cue_ball.is_potted
 
 
 func _is_ai_turn() -> bool:
@@ -898,9 +892,12 @@ func _simulate(delta: float) -> void:
 			_ball_in_hand = true
 		if _frame_over:
 			_end_frame()
-		elif _pending_foul_choice:
-			_begin_foul_choice()          # pro rules: play or ask them to play again
 		else:
+			# Pro rules: award a free ball if the incoming player is snookered.
+			if _pending_free_ball and _is_snookered(turn.current):
+				rules.free_ball = true
+				hud.flash("FREE BALL", Color(0.5, 0.95, 0.7))
+			_pending_free_ball = false
 			_resume_after_turn()
 		cue.queue_redraw()   # Re-show the aim guide now that control returns.
 
@@ -916,164 +913,6 @@ func _resume_after_turn() -> void:
 		_schedule_ai()
 	else:
 		_start_shot_timer()
-
-
-# ------------------------------------------------------------ Pro rules: foul choice
-## After a foul (pro rules on), decide who is asked and how: the bot decides for
-## itself; a local human sees the prompt; over LAN the host asks whichever player
-## is now on strike.
-func _begin_foul_choice() -> void:
-	_pending_foul_choice = false
-	if _net:
-		if not _net_host:
-			return                       # only the host (authority) drives this
-		_foul_choice_active = true
-		if turn.current == 0:            # the host is the incoming player
-			_show_foul_prompt()
-		else:                            # ask the guest
-			var peer := _guest_peer()
-			if peer == 0:                # no guest connected — just play on
-				_apply_foul_choice(false)
-			else:
-				_net_foul_prompt.rpc_id(peer)
-		return
-	if _is_ai_turn():
-		_apply_foul_choice(_bot_foul_choice())
-	else:
-		_foul_choice_active = true
-		_show_foul_prompt()
-
-
-## The bot plays the balls as they lie unless it has been left snookered, in which
-## case it plays on to take the free ball.
-func _bot_foul_choice() -> bool:
-	return false
-
-
-## Apply the incoming player's decision. Runs on the authority (host) or locally
-## in a non-networked game.
-func _apply_foul_choice(play_again: bool) -> void:
-	_foul_choice_active = false
-	_hide_foul_prompt()
-	if play_again:
-		turn.switch_turn()               # back to the offender, who must play again
-		hud.flash("%s PLAYS AGAIN" % str(turn.names[turn.current]), Color(1.0, 0.82, 0.4))
-	elif _is_snookered(turn.current):
-		rules.free_ball = true
-		hud.flash("FREE BALL", Color(0.5, 0.95, 0.7))
-	_resume_after_turn()
-	if _net_host:
-		_net_broadcast_state()
-
-
-## Called by a prompt button (local or guest). Sends the choice to the host in a
-## LAN match, or applies it directly otherwise.
-func _choose_foul(play_again: bool) -> void:
-	Audio.play("ui_click")
-	if _net and not _net_host:
-		_hide_foul_prompt()
-		_foul_choice_active = false      # the host takes over from here
-		_net_foul_choice.rpc_id(1, play_again)
-	else:
-		_apply_foul_choice(play_again)
-
-
-func _guest_peer() -> int:
-	var peers := multiplayer.get_peers()
-	return peers[0] if peers.size() > 0 else 0
-
-
-## Host -> guest: show the after-foul choice prompt on the guest.
-@rpc("authority", "call_remote", "reliable")
-func _net_foul_prompt() -> void:
-	if _net_host:
-		return
-	_foul_choice_active = true
-	_show_foul_prompt()
-
-
-## Guest -> host: the guest's choice (true = make the offender play again).
-@rpc("any_peer", "call_remote", "reliable")
-func _net_foul_choice(play_again: bool) -> void:
-	if not _net_host or not _foul_choice_active:
-		return
-	_apply_foul_choice(play_again)
-
-
-## A compact bottom-of-screen prompt with two choices. It does not dim the table
-## so the striker can weigh the position before deciding.
-func _show_foul_prompt() -> void:
-	_hide_foul_prompt()
-	var vp := get_viewport().get_visible_rect().size
-	_foul_prompt = CanvasLayer.new()
-	_foul_prompt.layer = 12
-	add_child(_foul_prompt)
-
-	var pc := PanelContainer.new()
-	var st := StyleBoxFlat.new()
-	st.bg_color = Color(0.08, 0.10, 0.13, 0.96)
-	st.set_corner_radius_all(20)
-	st.set_border_width_all(2)
-	st.border_color = Color(1.0, 0.82, 0.4, 0.6)
-	for m in ["left", "right"]:
-		st.set("content_margin_" + m, 28)
-	for m in ["top", "bottom"]:
-		st.set("content_margin_" + m, 22)
-	pc.add_theme_stylebox_override("panel", st)
-	_foul_prompt.add_child(pc)
-
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 14)
-	pc.add_child(vb)
-
-	var lbl := Label.new()
-	lbl.text = "Opponent fouled — your call"
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 30)
-	lbl.add_theme_color_override("font_color", Color(0.95, 0.96, 0.98))
-	vb.add_child(lbl)
-
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 16)
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	vb.add_child(row)
-	row.add_child(_foul_btn("Play the ball", Color(0.22, 0.60, 0.90), func(): _choose_foul(false)))
-	row.add_child(_foul_btn("Make them play again", Color(0.85, 0.55, 0.20), func(): _choose_foul(true)))
-
-	# Centre horizontally, sit just above the bottom HUD.
-	pc.reset_size()
-	await get_tree().process_frame
-	var sz := pc.size
-	pc.position = Vector2((vp.x - sz.x) * 0.5, vp.y * 0.62 - sz.y * 0.5)
-
-
-func _foul_btn(text: String, col: Color, handler: Callable) -> Button:
-	var b := Button.new()
-	b.text = text
-	b.custom_minimum_size = Vector2(0, 66)
-	b.add_theme_font_size_override("font_size", 28)
-	var mk := func(c: Color) -> StyleBoxFlat:
-		var s := StyleBoxFlat.new()
-		s.bg_color = c
-		s.set_corner_radius_all(14)
-		s.content_margin_left = 26
-		s.content_margin_right = 26
-		s.content_margin_top = 12
-		s.content_margin_bottom = 12
-		return s
-	b.add_theme_stylebox_override("normal", mk.call(col))
-	b.add_theme_stylebox_override("hover", mk.call(col.lightened(0.10)))
-	b.add_theme_stylebox_override("pressed", mk.call(col.darkened(0.10)))
-	b.add_theme_color_override("font_color", Color(1, 1, 1))
-	b.add_theme_color_override("font_hover_color", Color(1, 1, 1))
-	b.pressed.connect(handler)
-	return b
-
-
-func _hide_foul_prompt() -> void:
-	if _foul_prompt != null:
-		_foul_prompt.queue_free()
-		_foul_prompt = null
 
 
 # ---------------------------------------------------------------- Snooker detection
@@ -1187,10 +1026,10 @@ func _evaluate_shot() -> void:
 		turn.switch_turn()
 		hud.flash("FOUL  +%d" % res["foul_value"], Color(1.0, 0.5, 0.4))
 		_vibrate(60)
-		# Pro rules: the incoming player may play the balls as they lie or ask the
-		# offender to play again. Deferred so _simulate can put up the prompt.
+		# Pro rules: after the balls settle, award the incoming player a free ball
+		# if they've been left snookered (checked once positions are final).
 		if GameState.pro_rules:
-			_pending_foul_choice = true
+			_pending_free_ball = true
 	else:
 		if res["score"] > 0:
 			var before_break := turn.break_score
