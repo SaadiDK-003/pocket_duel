@@ -100,6 +100,10 @@ var _last_turn: int = -1             # for the "your turn" cue
 var _aim_send_t: int = 0             # throttle for live aim streaming
 var _place_send_t: int = 0           # throttle for ball-in-hand placement
 var _last_hud_sig: String = ""       # guest: only refresh the HUD when it changes
+var _ping_ms: int = 0                # measured round-trip time (LAN)
+var _ping_send_t: float = 0.0
+var _fps_t: float = 0.0
+var _fps_shown: bool = false
 const NET_HZ: float = 35.0           # state broadcasts per second while moving
 const NET_SNAP: float = 220.0        # jump farther than this -> snap (re-rack/respot)
 const NET_DELAY_MS: float = 90.0     # guest renders this far in the past (jitter buffer)
@@ -121,6 +125,19 @@ func _process(delta: float) -> void:
 		_net_interp_buffer()        # guest: interpolate between buffered snapshots
 	if _net:
 		_check_turn_cue()
+		_ping_send_t -= delta
+		if _ping_send_t <= 0.0:
+			_ping_send_t = 1.0
+			_net_ping.rpc(Time.get_ticks_msec())
+	if GameState.show_fps:
+		_fps_shown = true
+		_fps_t -= delta
+		if _fps_t <= 0.0:
+			_fps_t = 0.25
+			hud.set_debug(Engine.get_frames_per_second(), _ping_ms if _net else -1)
+	elif _fps_shown:
+		_fps_shown = false
+		hud.set_debug(-1, -1)
 	if _timer_active and not _paused:
 		_shot_time_left -= delta
 		if _shot_time_left <= 0.0:
@@ -819,6 +836,17 @@ func _net_emoji(idx: int, sender: int) -> void:
 	hud.show_emoji(idx, sender)
 
 
+# --- Ping (round-trip time) ---
+@rpc("any_peer", "call_remote", "unreliable")
+func _net_ping(t: int) -> void:
+	_net_pong.rpc_id(multiplayer.get_remote_sender_id(), t)
+
+
+@rpc("any_peer", "call_remote", "unreliable")
+func _net_pong(t: int) -> void:
+	_ping_ms = Time.get_ticks_msec() - t
+
+
 # ------------------------------------------------------------------ Simulation
 ## Advance the table once per rendered frame so motion tracks the display's
 ## refresh rate. Framerate-independent: the integrator is dt-based and the
@@ -1082,6 +1110,8 @@ func _confetti_tex() -> ImageTexture:
 
 ## Full-screen confetti rain — for a match win.
 func _celebrate() -> void:
+	if GameState.low_graphics:
+		return
 	_stop_celebrate()
 	_confetti = CanvasLayer.new()
 	_confetti.layer = 20                 # Above the match-complete overlay.
@@ -1111,6 +1141,8 @@ func _celebrate() -> void:
 
 ## A one-shot party-popper burst from `center` — for a frame win or a big break.
 func _confetti_burst(center: Vector2, amount: int) -> void:
+	if GameState.low_graphics:
+		return
 	var cl := CanvasLayer.new()
 	cl.layer = 20
 	add_child(cl)
@@ -1204,7 +1236,7 @@ func _pot_ball(b: Ball, pocket_pos: Vector2) -> void:
 ## Screen shake: nudge the table root (background & HUD are separate layers, so
 ## they don't move). Only ever runs while balls are in motion.
 func _add_shake(amount: float) -> void:
-	if not GameState.shake_enabled:
+	if not GameState.shake_enabled or GameState.low_graphics:
 		return
 	_shake_amt = maxf(_shake_amt, amount)
 
@@ -1225,6 +1257,8 @@ func _update_shake(delta: float) -> void:
 
 ## A quick particle burst in the ball's colour when it drops — pot "juice".
 func _pot_sparkle(pos: Vector2, col: Color) -> void:
+	if GameState.low_graphics:
+		return
 	var p := CPUParticles2D.new()
 	p.position = pos
 	p.z_index = 60

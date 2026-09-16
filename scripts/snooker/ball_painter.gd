@@ -8,6 +8,12 @@ extends RefCounted
 ## Draw a ball centred at `c`, radius `r`, opacity `a`, base colour `base`,
 ## highlight strength `hl` (dimmed while a ball sinks), in the given `style`.
 static func paint(ci: CanvasItem, c: Vector2, r: float, a: float, base: Color, hl: float, style: String) -> void:
+	# Low-graphics: a cheap 3-draw ball (for software/weak GPUs).
+	if GameState.low_graphics:
+		ci.draw_circle(c, r, _fade(base, a))
+		ci.draw_circle(c + Vector2(-r * 0.28, -r * 0.28), r * 0.22, Color(1, 1, 1, 0.55 * a * hl))
+		ci.draw_arc(c, r, 0.0, TAU, 20, Color(0, 0, 0, 0.35 * a), 1.5, true)
+		return
 	# Contact shadow on the cloth (down-right of the ball).
 	ci.draw_circle(c + Vector2(r * 0.18, r * 0.28), r * 1.02, Color(0, 0, 0, 0.28 * a))
 

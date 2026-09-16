@@ -19,6 +19,8 @@ var tap_to_shoot: bool = true    # true = drag-aim then tap SHOOT; false = relea
 var shot_timer: int = 0          # Seconds per shot (0 = off).
 var shake_enabled: bool = true   # Screen shake on break/hits/pots.
 var sparkle_enabled: bool = true # Particle burst when a ball drops.
+var low_graphics: bool = false   # Simplify visuals for weak/software GPUs.
+var show_fps: bool = false        # On-screen FPS (and ping in LAN).
 
 # --- Progression (persisted) ---
 var coins: int = 0
@@ -55,6 +57,8 @@ func save_settings() -> void:
 	c.set_value("gameplay", "shot_timer", shot_timer)
 	c.set_value("gameplay", "shake", shake_enabled)
 	c.set_value("gameplay", "sparkle", sparkle_enabled)
+	c.set_value("gameplay", "low_graphics", low_graphics)
+	c.set_value("gameplay", "show_fps", show_fps)
 	c.set_value("profile", "coins", coins)
 	c.set_value("profile", "owned", owned)
 	c.set_value("profile", "selected_cloth", selected_cloth)
@@ -82,6 +86,8 @@ func load_settings() -> void:
 	shot_timer = c.get_value("gameplay", "shot_timer", 0)
 	shake_enabled = c.get_value("gameplay", "shake", true)
 	sparkle_enabled = c.get_value("gameplay", "sparkle", true)
+	low_graphics = c.get_value("gameplay", "low_graphics", false)
+	show_fps = c.get_value("gameplay", "show_fps", false)
 	coins = c.get_value("profile", "coins", 0)
 	owned = c.get_value("profile", "owned", ["green", "classic", "set_classic"])
 	selected_cloth = c.get_value("profile", "selected_cloth", "green")
@@ -245,4 +251,6 @@ func reset_settings() -> void:
 	shot_timer = 0
 	shake_enabled = true
 	sparkle_enabled = true
+	low_graphics = false
+	show_fps = false
 	save_settings()

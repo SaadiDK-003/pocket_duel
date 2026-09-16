@@ -51,6 +51,7 @@ var _shoot_btn: Button
 var _cancel_btn: Button
 var _emoji_btn: Button
 var _emoji_popup: PanelContainer
+var _fps_lbl: Label
 
 
 func setup() -> void:
@@ -121,6 +122,27 @@ func setup() -> void:
 	spin = SpinSelector.new()
 	add_child(spin)
 	_make_emoji_ui()
+
+	_fps_lbl = Label.new()
+	_fps_lbl.add_theme_font_size_override("font_size", 22)
+	_fps_lbl.add_theme_color_override("font_color", Color(0.6, 1.0, 0.6))
+	_fps_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	_fps_lbl.add_theme_constant_override("outline_size", 4)
+	_fps_lbl.position = Vector2(14, 6)
+	_fps_lbl.hide()
+	add_child(_fps_lbl)
+
+
+## fps < 0 hides the readout; otherwise show "FPS n" (+ " · Nms" ping in LAN).
+func set_debug(fps: int, ping: int) -> void:
+	if fps < 0:
+		_fps_lbl.hide()
+		return
+	var t := "FPS %d" % fps
+	if ping >= 0:
+		t += "  ·  %dms" % ping
+	_fps_lbl.text = t
+	_fps_lbl.show()
 
 
 func _make_emoji_ui() -> void:
@@ -262,6 +284,7 @@ func layout(vp: Vector2, gutter_left: float = -1.0, gutter_right: float = -1.0) 
 	_shoot_btn.position = Vector2(w - 44 - _shoot_btn.size.x, h - 44 - _shoot_btn.size.y)
 	_cancel_btn.position = Vector2(_shoot_btn.position.x - 16 - _cancel_btn.size.x, h - 44 - _cancel_btn.size.y)
 	_emoji_btn.position = Vector2(w * 0.5 - _emoji_btn.size.x * 0.5, h - 40 - _emoji_btn.size.y)
+	_fps_lbl.position = Vector2(34, 22 + CARD_H + 12)   # just under the left card
 
 
 func _build_styles() -> void:

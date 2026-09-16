@@ -186,11 +186,14 @@ func _draw() -> void:
 	_draw_sight_dots(felt_rect)
 
 	# Felt bed: dark base, then the radial "spotlight" gradient over it.
-	_round_rect(felt_rect, 14.0, felt_dark)
-	if _felt_grad != null:
-		draw_texture_rect(_felt_grad, felt_rect, false)
-	if _felt_tex != null:
-		draw_texture_rect(_felt_tex, felt_rect, true, Color(1, 1, 1, 0.05))   # cloth grain
+	if GameState.low_graphics:
+		_round_rect(felt_rect, 14.0, felt_color)                 # flat felt — cheap fill
+	else:
+		_round_rect(felt_rect, 14.0, felt_dark)
+		if _felt_grad != null:
+			draw_texture_rect(_felt_grad, felt_rect, false)
+		if _felt_tex != null:
+			draw_texture_rect(_felt_tex, felt_rect, true, Color(1, 1, 1, 0.05))   # cloth grain
 	_round_rect_outline(felt_rect, 14.0, felt_dark.darkened(0.2), 3.0)
 
 	# Baulk line + "D".
