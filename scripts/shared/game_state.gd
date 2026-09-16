@@ -21,6 +21,7 @@ var shake_enabled: bool = true   # Screen shake on break/hits/pots.
 var sparkle_enabled: bool = true # Particle burst when a ball drops.
 var low_graphics: bool = false   # Simplify visuals for weak/software GPUs.
 var show_fps: bool = false        # On-screen FPS (and ping in LAN).
+var pro_rules: bool = false       # Free ball + "play again" after a foul.
 
 # --- Progression (persisted) ---
 var coins: int = 0
@@ -59,6 +60,7 @@ func save_settings() -> void:
 	c.set_value("gameplay", "sparkle", sparkle_enabled)
 	c.set_value("gameplay", "low_graphics", low_graphics)
 	c.set_value("gameplay", "show_fps", show_fps)
+	c.set_value("gameplay", "pro_rules", pro_rules)
 	c.set_value("profile", "coins", coins)
 	c.set_value("profile", "owned", owned)
 	c.set_value("profile", "selected_cloth", selected_cloth)
@@ -88,6 +90,7 @@ func load_settings() -> void:
 	sparkle_enabled = c.get_value("gameplay", "sparkle", true)
 	low_graphics = c.get_value("gameplay", "low_graphics", false)
 	show_fps = c.get_value("gameplay", "show_fps", false)
+	pro_rules = c.get_value("gameplay", "pro_rules", false)
 	coins = c.get_value("profile", "coins", 0)
 	owned = c.get_value("profile", "owned", ["green", "classic", "set_classic"])
 	selected_cloth = c.get_value("profile", "selected_cloth", "green")
@@ -253,4 +256,5 @@ func reset_settings() -> void:
 	sparkle_enabled = true
 	low_graphics = false
 	show_fps = false
+	pro_rules = false
 	save_settings()

@@ -55,37 +55,69 @@ func _build() -> void:
 	center.add_child(pc)
 
 	var margin := MarginContainer.new()
-	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 44)
+	for side in ["left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, 40)
+	margin.add_theme_constant_override("margin_top", 34)
+	margin.add_theme_constant_override("margin_bottom", 34)
 	pc.add_child(margin)
 
+	# Responsive width/columns: wide screens get two columns of toggles so the
+	# panel stays short; narrow screens fall back to a single column + scroll.
+	var vp := get_viewport().get_visible_rect().size
+	var content_w: float = clampf(vp.x * 0.86, 560.0, 1180.0)
+	var cols: int = 2 if content_w >= 900.0 else 1
+
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 14)
-	vb.custom_minimum_size = Vector2(560, 0)
+	vb.add_theme_constant_override("separation", 12)
+	vb.custom_minimum_size = Vector2(content_w, 0)
 	margin.add_child(vb)
 
 	_title(vb, "SETTINGS")
-	_spacer(vb, 10)
-	_toggle_row(vb, "Sound", GameState.sound_enabled,
+	_spacer(vb, 8)
+
+	# Middle section scrolls if it doesn't fit, so the title stays pinned at the
+	# top and Back stays pinned at the bottom no matter how many rows there are.
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(content_w, clampf(vp.y * 0.50, 300.0, 620.0))
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.add_child(scroll)
+
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 12)
+	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(inner)
+
+	var grid := GridContainer.new()
+	grid.columns = cols
+	grid.add_theme_constant_override("h_separation", 28)
+	grid.add_theme_constant_override("v_separation", 12)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inner.add_child(grid)
+
+	_toggle_row(grid, "Sound", GameState.sound_enabled,
 		func(on): GameState.sound_enabled = on; GameState.save_settings())
-	_toggle_row(vb, "Music", GameState.music_enabled,
+	_toggle_row(grid, "Music", GameState.music_enabled,
 		func(on): GameState.music_enabled = on; GameState.save_settings())
-	_toggle_row(vb, "Vibration", GameState.vibration_enabled,
+	_toggle_row(grid, "Vibration", GameState.vibration_enabled,
 		func(on): GameState.vibration_enabled = on; GameState.save_settings())
-	_toggle_row(vb, "Tap to Shoot", GameState.tap_to_shoot,
+	_toggle_row(grid, "Tap to Shoot", GameState.tap_to_shoot,
 		func(on): GameState.tap_to_shoot = on; GameState.save_settings())
-	_toggle_row(vb, "Screen Shake", GameState.shake_enabled,
+	_toggle_row(grid, "Screen Shake", GameState.shake_enabled,
 		func(on): GameState.shake_enabled = on; GameState.save_settings())
-	_toggle_row(vb, "Pot Sparkle", GameState.sparkle_enabled,
+	_toggle_row(grid, "Pot Sparkle", GameState.sparkle_enabled,
 		func(on): GameState.sparkle_enabled = on; GameState.save_settings())
-	_toggle_row(vb, "Low Graphics", GameState.low_graphics,
+	_toggle_row(grid, "Low Graphics", GameState.low_graphics,
 		func(on): GameState.low_graphics = on; GameState.save_settings())
-	_toggle_row(vb, "Show FPS", GameState.show_fps,
+	_toggle_row(grid, "Show FPS", GameState.show_fps,
 		func(on): GameState.show_fps = on; GameState.save_settings())
-	_spacer(vb, 6)
+	_toggle_row(grid, "Pro Rules", GameState.pro_rules,
+		func(on): GameState.pro_rules = on; GameState.save_settings())
+
+	_spacer(inner, 6)
 
 	var timer_values := [0, 30, 20, 15]
-	var st_btn := _button(vb, "", func(): pass, false)
+	var st_btn := _button(inner, "", func(): pass, false)
 	var st_label := func() -> String:
 		return "Shot Timer: Off" if GameState.shot_timer == 0 else "Shot Timer: %ds" % GameState.shot_timer
 	st_btn.text = st_label.call()
@@ -95,8 +127,10 @@ func _build() -> void:
 		GameState.save_settings()
 		st_btn.text = st_label.call())
 
-	_spacer(vb, 12)
-	_button(vb, "Reset to defaults", func(): GameState.reset_settings(); _build(), false)
+	_spacer(inner, 6)
+	_button(inner, "Reset to defaults", func(): GameState.reset_settings(); _build(), false)
+
+	_spacer(vb, 10)
 	_button(vb, "Back", close, true)
 
 
@@ -148,8 +182,9 @@ func _button(parent: Node, text: String, handler: Callable, primary: bool) -> Bu
 
 func _toggle_row(parent: Node, label: String, initial: bool, cb: Callable) -> void:
 	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 24)
-	h.custom_minimum_size = Vector2(560, 0)
+	h.add_theme_constant_override("separation", 20)
+	h.custom_minimum_size = Vector2(360, 0)
+	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var l := Label.new()
 	l.text = label
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL

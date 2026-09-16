@@ -27,6 +27,7 @@ var on_red: bool = true            # REDS phase: is a red the ball "on"?
 var phase: int = Phase.REDS
 var next_colour: int = 2           # COLOURS phase: value of the ball "on"
 var frame_complete: bool = false
+var free_ball: bool = false        # Pro rules: this shot is on a free ball.
 
 
 func reset(reds: int) -> void:
@@ -35,14 +36,18 @@ func reset(reds: int) -> void:
 	phase = Phase.REDS
 	next_colour = 2
 	frame_complete = false
+	free_ball = false
 
 
 func on_ball_text() -> String:
 	if frame_complete:
 		return "Frame over"
+	var base: String
 	if phase == Phase.COLOURS:
-		return COLOUR_NAMES.get(next_colour, "-")
-	return "RED" if on_red else "COLOUR"
+		base = COLOUR_NAMES.get(next_colour, "-")
+	else:
+		base = "RED" if on_red else "COLOUR"
+	return "FREE • " + base if free_ball else base
 
 
 ## Evaluate a finished shot.
@@ -63,6 +68,11 @@ func evaluate(first, potted: Array, cue_potted: bool) -> Dictionary:
 			reds.append(b)
 		else:
 			colours.append(b)
+
+	# Pro rules: a free ball relaxes the "ball on" for this one shot — the striker
+	# may hit and pot any ball, and it scores the value of the ball that was on.
+	if free_ball:
+		return _eval_free_ball(first, reds, colours, cue_potted, res)
 
 	var foul: bool = false
 	var offend: int = 0            # Highest value involved in a foul.
@@ -145,6 +155,57 @@ func evaluate(first, potted: Array, cue_potted: bool) -> Dictionary:
 		next_colour = 2
 
 	return res
+
+
+## Evaluate a shot taken on a free ball. Any ball may be struck; potting exactly
+## one ball scores the value of the ball that was on, and the potted ball is
+## respotted (it was only nominated, never the real object ball being cleared).
+func _eval_free_ball(first, reds: Array, colours: Array, cue_potted: bool, res: Dictionary) -> Dictionary:
+	free_ball = false
+	var potted_count: int = reds.size() + colours.size()
+	var foul: bool = cue_potted or first == null or potted_count > 1
+
+	if foul:
+		res["foul"] = true
+		res["keep_turn"] = false
+		res["score"] = 0
+		res["foul_value"] = maxi(FOUL_MIN, _on_value())
+		res["respot"] = colours.duplicate()          # potted colours go back up
+		reds_remaining -= reds.size()                # any fouled reds stay down
+		_post_eval_phase()
+		return res
+
+	if potted_count == 0:                            # a legal safety off the free ball
+		res["keep_turn"] = false
+		return res
+
+	# Exactly one ball potted — it counts as the ball on.
+	var potted_ball = reds[0] if reds.size() == 1 else colours[0]
+	res["keep_turn"] = true
+	if phase == Phase.COLOURS:
+		res["score"] = next_colour                   # scores the colour that was on
+		res["respot"].append(potted_ball)            # nominated ball respots
+	elif on_red:
+		res["score"] = 1                             # a red is worth one
+		if potted_ball.type == Ball.BallType.RED:
+			reds_remaining -= 1                       # an actual red really goes down
+		else:
+			res["respot"].append(potted_ball)        # a colour-as-red respots
+		on_red = false
+	else:
+		res["score"] = potted_ball.value             # nominated colour's value
+		res["respot"].append(potted_ball)
+		on_red = true
+
+	_post_eval_phase()
+	return res
+
+
+## Move to the colours sequence once the reds are exhausted while on a red.
+func _post_eval_phase() -> void:
+	if phase == Phase.REDS and reds_remaining <= 0 and on_red:
+		phase = Phase.COLOURS
+		next_colour = 2
 
 
 func _on_value() -> int:
